@@ -37,6 +37,24 @@ class Level(Base):
     counts_for_rating: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class Skill(Base):
+    """Manager-defined skills (dialing, steaming, …) checked off per employee."""
+
+    __tablename__ = "skills"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+
+
+class EmployeeSkill(Base):
+    __tablename__ = "employee_skills"
+    __table_args__ = (UniqueConstraint("employee_id", "skill_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_id: Mapped[int] = mapped_column(ForeignKey("employees.id"))
+    skill_id: Mapped[int] = mapped_column(ForeignKey("skills.id"))
+
+
 class Employee(Base):
     __tablename__ = "employees"
 
@@ -57,6 +75,7 @@ class Employee(Base):
     time_off: Mapped[list["TimeOff"]] = relationship(
         back_populates="employee", cascade="all, delete-orphan"
     )
+    skills: Mapped[list[Skill]] = relationship(secondary="employee_skills")
 
     def level_on(self, on_date: date) -> Level | None:
         current = None
@@ -104,6 +123,48 @@ class TimeOff(Base):
     reason: Mapped[str] = mapped_column(String, default="")
 
     employee: Mapped[Employee] = relationship(back_populates="time_off")
+
+
+class ShiftBlock(Base):
+    """Manager-defined reusable shift window (e.g. 'Open' 6:30–14:30).
+    The weekly pattern places blocks on weekdays with level headcounts."""
+
+    __tablename__ = "shift_blocks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+    start_min: Mapped[int] = mapped_column(Integer)
+    end_min: Mapped[int] = mapped_column(Integer)
+
+
+class ShiftTemplate(Base):
+    """One block placed on one weekday of the recurring pattern, with the
+    level headcounts needed. Applied to every future week when its schedule
+    is generated, until the manager changes the pattern."""
+
+    __tablename__ = "shift_templates"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    weekday: Mapped[int] = mapped_column(Integer)  # 0=Monday .. 6=Sunday
+    block_id: Mapped[int] = mapped_column(ForeignKey("shift_blocks.id"))
+
+    block: Mapped[ShiftBlock] = relationship()
+    requirements: Mapped[list["TemplateRequirement"]] = relationship(
+        back_populates="template", cascade="all, delete-orphan"
+    )
+
+
+class TemplateRequirement(Base):
+    __tablename__ = "template_requirements"
+    __table_args__ = (UniqueConstraint("template_id", "level_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey("shift_templates.id"))
+    level_id: Mapped[int] = mapped_column(ForeignKey("levels.id"))
+    count: Mapped[int] = mapped_column(Integer, default=1)
+
+    template: Mapped[ShiftTemplate] = relationship(back_populates="requirements")
+    level: Mapped[Level] = relationship()
 
 
 class Shift(Base):
@@ -198,6 +259,10 @@ class SolverConfig(Base):
     min_rest_minutes: Mapped[int] = mapped_column(Integer, default=480)
     rating_lookback_days: Mapped[int] = mapped_column(Integer, default=90)
     shrinkage_tickets: Mapped[int] = mapped_column(Integer, default=300)
+    # overridable limits: the solver never crosses these on its own; manual
+    # assignments may, and get flagged on the schedule
+    max_day_minutes: Mapped[int] = mapped_column(Integer, default=480)
+    max_consecutive_days: Mapped[int] = mapped_column(Integer, default=6)
 
 
 class WorkSession(Base):

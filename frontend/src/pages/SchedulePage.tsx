@@ -146,7 +146,7 @@ export default function SchedulePage() {
         {isManager && (
           <>
             <button className="secondary" onClick={copyLastWeek}>Copy last week's shifts</button>
-            <button onClick={generate} disabled={busy || shifts.length === 0}>
+            <button onClick={generate} disabled={busy}>
               {busy ? 'Solving…' : detail ? 'Re-generate' : 'Generate schedule'}
             </button>
             {detail && detail.schedule.status !== 'published' && (
@@ -157,6 +157,14 @@ export default function SchedulePage() {
       </div>
       {error && <div className="error">{error}</div>}
       {notice && <div className="ok">{notice}</div>}
+      {isManager && detail && detail.warnings.length > 0 && (
+        <div className="panel" style={{ background: 'var(--warn-bg)', borderColor: 'var(--warn-line)' }}>
+          <b>⚠ Limit overrides on this schedule</b>
+          {detail.warnings.map((w, i) => (
+            <div key={i} style={{ fontSize: 13, marginTop: 4 }}>{w.message}</div>
+          ))}
+        </div>
+      )}
       {!isManager && !detail && <div className="panel muted">No published schedule for this week yet.</div>}
 
       <div className="board">

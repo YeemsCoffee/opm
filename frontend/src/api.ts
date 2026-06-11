@@ -73,6 +73,11 @@ export interface Level {
   counts_for_rating: boolean
 }
 
+export interface Skill {
+  id: number
+  name: string
+}
+
 export interface Employee {
   id: number
   name: string
@@ -82,6 +87,8 @@ export interface Employee {
   target_week_minutes: number | null
   availability_confirmed: boolean
   level: Level | null
+  skills: Skill[]
+  availability: AvailabilityWindow[]
 }
 
 export interface AvailabilityWindow {
@@ -113,6 +120,20 @@ export interface Shift {
   requirements: Requirement[]
 }
 
+export interface ShiftBlock {
+  id: number
+  name: string
+  start_min: number
+  end_min: number
+}
+
+export interface ShiftTemplate {
+  id: number
+  weekday: number
+  block: ShiftBlock
+  requirements: Requirement[]
+}
+
 export interface Assignment {
   id: number
   shift_id: number
@@ -129,6 +150,13 @@ export interface UnfilledSlot {
   missing: number
 }
 
+export interface ScheduleWarning {
+  employee_id: number
+  employee_name: string
+  kind: string
+  message: string
+}
+
 export interface ScheduleDetail {
   schedule: {
     id: number
@@ -138,6 +166,7 @@ export interface ScheduleDetail {
   }
   shifts: Shift[]
   unfilled: UnfilledSlot[]
+  warnings: ScheduleWarning[]
 }
 
 export interface Suggestion {

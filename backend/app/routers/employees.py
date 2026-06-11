@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from .. import schemas
 from ..auth import current_user, require_manager
 from ..db import get_db
-from ..models import Availability, Employee, EmployeeLevel, Level, TimeOff, User
+from ..models import Availability, Employee, EmployeeLevel, EmployeeSkill, Level, Skill, TimeOff, User
 
 router = APIRouter(prefix="/api", tags=["employees"])
 
@@ -23,6 +23,8 @@ def _employee_out(e: Employee) -> dict:
         "target_week_minutes": e.target_week_minutes,
         "availability_confirmed": e.availability_confirmed,
         "level": lvl,
+        "skills": e.skills,
+        "availability": e.availability,
     }
 
 
@@ -53,6 +55,48 @@ def update_level(
     return level
 
 
+@router.get("/skills", response_model=list[schemas.SkillOut])
+def list_skills(_: User = Depends(current_user), db: Session = Depends(get_db)):
+    return db.scalars(select(Skill).order_by(Skill.name)).all()
+
+
+@router.post("/skills", response_model=schemas.SkillOut)
+def create_skill(
+    body: schemas.SkillIn, _: User = Depends(require_manager), db: Session = Depends(get_db)
+):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(422, "Skill name required")
+    if db.scalar(select(Skill).where(Skill.name == name)):
+        raise HTTPException(409, "Skill already exists")
+    skill = Skill(name=name)
+    db.add(skill)
+    db.commit()
+    return skill
+
+
+@router.delete("/skills/{skill_id}")
+def delete_skill(skill_id: int, _: User = Depends(require_manager), db: Session = Depends(get_db)):
+    skill = db.get(Skill, skill_id)
+    if skill is None:
+        raise HTTPException(404, "Skill not found")
+    for link in db.scalars(select(EmployeeSkill).where(EmployeeSkill.skill_id == skill_id)):
+        db.delete(link)
+    db.delete(skill)
+    db.commit()
+    return {"ok": True}
+
+
+def _set_skills(db: Session, e: Employee, skill_ids: list[int]) -> None:
+    for link in db.scalars(select(EmployeeSkill).where(EmployeeSkill.employee_id == e.id)):
+        db.delete(link)
+    db.flush()
+    for sid in set(skill_ids):
+        if db.get(Skill, sid) is None:
+            raise HTTPException(422, f"Unknown skill id {sid}")
+        db.add(EmployeeSkill(employee_id=e.id, skill_id=sid))
+
+
 @router.get("/employees", response_model=list[schemas.EmployeeOut])
 def list_employees(_: User = Depends(current_user), db: Session = Depends(get_db)):
     employees = db.scalars(select(Employee).order_by(Employee.name)).all()
@@ -75,6 +119,8 @@ def create_employee(
     db.add(e)
     db.flush()
     db.add(EmployeeLevel(employee_id=e.id, level_id=body.level_id, effective_from=date.today()))
+    if body.skill_ids:
+        _set_skills(db, e, body.skill_ids)
     db.commit()
     db.refresh(e)
     return _employee_out(e)
@@ -94,6 +140,8 @@ def update_employee(
         val = getattr(body, attr)
         if val is not None:
             setattr(e, attr, val)
+    if body.skill_ids is not None:
+        _set_skills(db, e, body.skill_ids)
     if body.level_id is not None:
         current = e.level_on(date.today())
         if current is None or current.id != body.level_id:

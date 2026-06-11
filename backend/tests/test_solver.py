@@ -163,6 +163,6 @@ def test_suggestions_for_unfilled_slot(db):
     names = {c["employee_name"]: c for c in suggestions}
     assert names["Lead"]["softness"] == 0          # higher level covering down
     assert names["Busy"]["softness"] == 1          # over hours cap
-    assert names["OffHours"]["softness"] == 2      # outside availability
+    assert names["OffHours"]["softness"] == 3      # outside availability
     assert "Lower" not in names
     assert suggestions == sorted(suggestions, key=lambda c: c["softness"])

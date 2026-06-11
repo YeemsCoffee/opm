@@ -5,6 +5,8 @@ interface SolverConfig {
   min_rest_minutes: number
   rating_lookback_days: number
   shrinkage_tickets: number
+  max_day_minutes: number
+  max_consecutive_days: number
 }
 
 interface WhatIf {
@@ -156,8 +158,28 @@ function SolverSection() {
             onChange={(e) => setCfg({ ...cfg, shrinkage_tickets: Number(e.target.value) })}
           />
         </div>
+        <div>
+          <label>Max hours/day (overtime line)</label>
+          <input
+            type="number" min={1} max={24} step={0.5}
+            value={cfg.max_day_minutes / 60}
+            onChange={(e) => setCfg({ ...cfg, max_day_minutes: Math.round(Number(e.target.value) * 60) })}
+          />
+        </div>
+        <div>
+          <label>Max consecutive days (rolling)</label>
+          <input
+            type="number" min={1} max={13}
+            value={cfg.max_consecutive_days}
+            onChange={(e) => setCfg({ ...cfg, max_consecutive_days: Number(e.target.value) })}
+          />
+        </div>
         <button onClick={save}>Save</button>
       </div>
+      <p className="muted" style={{ marginBottom: 0 }}>
+        The solver never crosses these limits on its own. Manual assignments can — they get
+        flagged with ⚠ on the schedule.
+      </p>
       {saved && <div className="ok">Saved</div>}
       {error && <div className="error">{error}</div>}
     </div>

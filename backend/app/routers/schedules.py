@@ -8,8 +8,9 @@ from .. import schemas
 from ..auth import current_user, require_manager
 from ..db import get_db
 from ..models import Assignment, Employee, Level, Schedule, Shift, ShiftRequirement, User
-from ..services.solver import _conflicts, apply_solution, solve_schedule
+from ..services.solver import _conflicts, apply_solution, schedule_warnings, solve_schedule
 from ..services.suggestions import suggest_for_slot
+from .templates import materialize_week
 
 router = APIRouter(prefix="/api/schedules", tags=["schedules"])
 
@@ -93,6 +94,7 @@ def _detail(db: Session, schedule: Schedule) -> dict:
         },
         "shifts": shifts,
         "unfilled": _unfilled(schedule, shifts),
+        "warnings": schedule_warnings(db, schedule, shifts),
     }
 
 
@@ -118,8 +120,11 @@ def get_week(week_start: date, user: User = Depends(current_user), db: Session =
 def generate(week_start: date, _: User = Depends(require_manager), db: Session = Depends(get_db)):
     if week_start.weekday() != 0:
         raise HTTPException(422, "week_start must be a Monday")
+    materialize_week(db, week_start)
     if not _week_shifts(db, week_start):
-        raise HTTPException(422, "No shifts defined for that week — add shifts first")
+        raise HTTPException(
+            422, "No shifts for that week — set a weekly pattern or add shifts first"
+        )
     schedule = db.scalar(select(Schedule).where(Schedule.week_start == week_start))
     if schedule is None:
         schedule = Schedule(week_start=week_start)

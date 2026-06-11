@@ -24,18 +24,30 @@ rating derived from **ticket time adherence**.
 
 ## How scheduling works
 
+- **Weekly pattern**: managers define reusable **shift blocks** (name +
+  start/end time, e.g. "Open" 6:30–2:30) and place them on weekdays with
+  per-level headcounts ("Monday needs 1 Open: 1× Shift Lead, 1× B2, 2× K1").
+  Every future week is generated from this pattern until it's changed;
+  weeks already generated or hand-edited keep their own shifts.
 - **Hard rules** (never bent automatically): availability windows, time
   off, exact level match per slot, no overlapping shifts, minimum rest
-  between days, weekly max hours.
+  between days, max hours per day and per week, and no 7th consecutive
+  worked day — rolling across week boundaries, seeded from timesheets and
+  prior schedules. The daily/weekly/consecutive limits are configurable in
+  Settings.
 - **Objective**, in strict priority: fill every slot → maximize team +/-
   weighted by each shift's forecast ticket demand → keep hours close to
   each employee's target.
 - **Unfillable slots stay visibly empty** on the board. Clicking one shows
   ranked suggestions, each labeled with the exact rule it would bend
-  (higher level covering down ▸ over weekly hours ▸ outside availability).
-  Assigning is always the manager's call; manual picks (✎) survive
-  re-generation.
+  (higher level covering down ▸ overtime ▸ 7th consecutive day ▸ outside
+  availability). Assigning is always the manager's call; manual picks (✎)
+  survive re-generation, and any limit they cross is flagged with ⚠ on the
+  schedule.
 - Publish makes the week visible to employee accounts.
+
+Employees also carry manager-defined **skills** (dialing, steaming, …) as
+checkboxes, and per-day-of-week availability windows.
 
 ## Running it
 
@@ -70,9 +82,9 @@ cd backend && ../.venv/bin/python -m pytest tests/
 1. Employees keep availability/time-off current (their own login → *My
    availability*). No windows entered = treated as fully available,
    flagged "unconfirmed".
-2. Manager: *Schedule* → **Copy last week's shifts** (or add/edit shifts
-   and their level requirements) → **Generate** → resolve any highlighted
-   gaps via suggestions → **Publish**.
+2. Manager: *Shift pattern* → define blocks and place them on weekdays
+   (once). Then weekly: *Schedule* → **Generate** → resolve any
+   highlighted gaps via suggestions → **Publish**.
 3. After each payroll period, import the new kitchen report + timesheets
    to keep ratings fresh.
 
@@ -97,5 +109,6 @@ frontend/src/pages/    # React UI (schedule board, employees, ratings…)
 
 - Adjusted +/- via ridge regression (separates individuals who always work
   together; raw on/off +/- inherits crewmate effects).
-- Shift templates beyond copy-week; notifications on publish.
+- Per-shift skill requirements (skills are currently informational).
+- Notifications on publish.
 - Direct Square API sync instead of CSV import.

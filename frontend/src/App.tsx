@@ -7,6 +7,7 @@ import RatingsPage from './pages/RatingsPage'
 import ImportsPage from './pages/ImportsPage'
 import SettingsPage from './pages/SettingsPage'
 import MyAvailabilityPage from './pages/MyAvailabilityPage'
+import PatternPage from './pages/PatternPage'
 
 export default function App() {
   const navigate = useNavigate()
@@ -26,6 +27,7 @@ export default function App() {
       <nav className="sidebar">
         <div className="brand">Yeems OPM</div>
         <NavLink to="/schedule">Schedule</NavLink>
+        {role === 'manager' && <NavLink to="/pattern">Shift pattern</NavLink>}
         {role === 'manager' && <NavLink to="/employees">Employees</NavLink>}
         {role === 'manager' && <NavLink to="/ratings">Plus/Minus</NavLink>}
         {role === 'manager' && <NavLink to="/imports">Imports</NavLink>}
@@ -40,6 +42,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/schedule" replace />} />
           <Route path="/schedule" element={<SchedulePage />} />
+          {role === 'manager' && <Route path="/pattern" element={<PatternPage />} />}
           {role === 'manager' && <Route path="/employees" element={<EmployeesPage />} />}
           {role === 'manager' && <Route path="/ratings" element={<RatingsPage />} />}
           {role === 'manager' && <Route path="/imports" element={<ImportsPage />} />}

@@ -48,6 +48,17 @@ class LevelUpdate(BaseModel):
     counts_for_rating: bool | None = None
 
 
+# --- skills ---
+
+class SkillOut(ORMModel):
+    id: int
+    name: str
+
+
+class SkillIn(BaseModel):
+    name: str
+
+
 # --- employees ---
 
 class AvailabilityIn(BaseModel):
@@ -83,6 +94,7 @@ class EmployeeIn(BaseModel):
     max_week_minutes: int = 2400
     target_week_minutes: int | None = None
     active: bool = True
+    skill_ids: list[int] = []
 
 
 class EmployeeUpdate(BaseModel):
@@ -91,6 +103,7 @@ class EmployeeUpdate(BaseModel):
     max_week_minutes: int | None = None
     target_week_minutes: int | None = None
     active: bool | None = None
+    skill_ids: list[int] | None = None
 
 
 class EmployeeOut(ORMModel):
@@ -102,6 +115,8 @@ class EmployeeOut(ORMModel):
     target_week_minutes: int | None
     availability_confirmed: bool
     level: LevelOut | None = None
+    skills: list[SkillOut] = []
+    availability: list[AvailabilityOut] = []
 
 
 # --- shifts ---
@@ -134,6 +149,34 @@ class ShiftOut(ORMModel):
     requirements: list[RequirementOut]
 
 
+# --- shift blocks & weekly pattern ---
+
+class BlockIn(BaseModel):
+    name: str
+    start_min: int
+    end_min: int
+
+
+class BlockOut(ORMModel):
+    id: int
+    name: str
+    start_min: int
+    end_min: int
+
+
+class TemplateIn(BaseModel):
+    weekday: int
+    block_id: int
+    requirements: list[RequirementIn] = []
+
+
+class TemplateOut(ORMModel):
+    id: int
+    weekday: int
+    block: BlockOut
+    requirements: list[RequirementOut]
+
+
 # --- schedules ---
 
 class AssignmentOut(ORMModel):
@@ -159,10 +202,18 @@ class ScheduleOut(ORMModel):
     assignments: list[AssignmentOut]
 
 
+class ScheduleWarning(BaseModel):
+    employee_id: int
+    employee_name: str
+    kind: str  # overtime_day | overtime_week | consecutive_days
+    message: str
+
+
 class ScheduleDetail(BaseModel):
     schedule: ScheduleOut
     shifts: list[ShiftOut]
     unfilled: list[UnfilledSlot]
+    warnings: list[ScheduleWarning] = []
 
 
 class ManualAssignIn(BaseModel):
@@ -231,9 +282,13 @@ class SolverConfigOut(ORMModel):
     min_rest_minutes: int
     rating_lookback_days: int
     shrinkage_tickets: int
+    max_day_minutes: int
+    max_consecutive_days: int
 
 
 class SolverConfigIn(BaseModel):
     min_rest_minutes: int | None = None
     rating_lookback_days: int | None = None
     shrinkage_tickets: int | None = None
+    max_day_minutes: int | None = None
+    max_consecutive_days: int | None = None

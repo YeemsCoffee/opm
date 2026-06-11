@@ -7,12 +7,28 @@ import {
   type AvailabilityWindow,
   type Employee,
   type Level,
+  type Skill,
   type TimeOff,
 } from '../api'
+
+function DaysAvailable({ e }: { e: Employee }) {
+  if (!e.availability.length) return <span className="muted">any day</span>
+  const days = new Set(e.availability.map((w) => w.weekday))
+  return (
+    <span title="Days with availability windows">
+      {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((c, i) => (
+        <span key={i} style={{ opacity: days.has(i) ? 1 : 0.2, fontWeight: 700, marginRight: 3 }}>
+          {c}
+        </span>
+      ))}
+    </span>
+  )
+}
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [levels, setLevels] = useState<Level[]>([])
+  const [skills, setSkills] = useState<Skill[]>([])
   const [editing, setEditing] = useState<Employee | null>(null)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState('')
@@ -20,6 +36,7 @@ export default function EmployeesPage() {
   const load = () => {
     api<Employee[]>('/api/employees').then(setEmployees).catch((e) => setError(e.message))
     api<Level[]>('/api/levels').then(setLevels).catch(() => {})
+    api<Skill[]>('/api/skills').then(setSkills).catch(() => {})
   }
   useEffect(load, [])
 
@@ -39,8 +56,8 @@ export default function EmployeesPage() {
         <table>
           <thead>
             <tr>
-              <th>Name</th><th>Level</th><th>Max hrs/wk</th><th>Target hrs/wk</th>
-              <th>Availability</th><th>Status</th><th />
+              <th>Name</th><th>Level</th><th>Skills</th><th>Max hrs/wk</th><th>Target hrs/wk</th>
+              <th>Days available</th><th>Availability</th><th>Status</th><th />
             </tr>
           </thead>
           <tbody>
@@ -48,8 +65,14 @@ export default function EmployeesPage() {
               <tr key={e.id}>
                 <td>{e.name}</td>
                 <td><span className="pill">{e.level?.name ?? '—'}</span></td>
+                <td>
+                  {e.skills.length
+                    ? e.skills.map((s) => <span className="pill" key={s.id} style={{ marginRight: 3 }}>{s.name}</span>)
+                    : <span className="muted">—</span>}
+                </td>
                 <td>{(e.max_week_minutes / 60).toFixed(0)}</td>
                 <td>{e.target_week_minutes != null ? (e.target_week_minutes / 60).toFixed(0) : <span className="muted">—</span>}</td>
+                <td><DaysAvailable e={e} /></td>
                 <td>
                   {e.availability_confirmed
                     ? <span className="pill good">confirmed</span>
@@ -66,6 +89,8 @@ export default function EmployeesPage() {
         <EmployeeModal
           employee={editing ?? undefined}
           levels={levels}
+          allSkills={skills}
+          onSkillsChanged={() => api<Skill[]>('/api/skills').then(setSkills).catch(() => {})}
           onClose={() => { setEditing(null); setAdding(false) }}
           onSaved={() => { setEditing(null); setAdding(false); load() }}
         />
@@ -77,11 +102,15 @@ export default function EmployeesPage() {
 function EmployeeModal({
   employee,
   levels,
+  allSkills,
+  onSkillsChanged,
   onClose,
   onSaved,
 }: {
   employee?: Employee
   levels: Level[]
+  allSkills: Skill[]
+  onSkillsChanged: () => void
   onClose: () => void
   onSaved: () => void
 }) {
@@ -92,7 +121,21 @@ function EmployeeModal({
     employee?.target_week_minutes != null ? employee.target_week_minutes / 60 : '',
   )
   const [active, setActive] = useState(employee?.active ?? true)
+  const [skillIds, setSkillIds] = useState<number[]>(employee?.skills.map((s) => s.id) ?? [])
+  const [newSkill, setNewSkill] = useState('')
   const [error, setError] = useState('')
+
+  const addSkill = async () => {
+    if (!newSkill.trim()) return
+    try {
+      const created = await api<Skill>('/api/skills', { method: 'POST', body: { name: newSkill.trim() } })
+      setSkillIds([...skillIds, created.id])
+      setNewSkill('')
+      onSkillsChanged()
+    } catch (err) {
+      if (err instanceof Error) setError(err.message)
+    }
+  }
 
   const save = async () => {
     setError('')
@@ -102,6 +145,7 @@ function EmployeeModal({
       max_week_minutes: Math.round(Number(maxHours) * 60),
       target_week_minutes: targetHours === '' ? null : Math.round(Number(targetHours) * 60),
       active,
+      skill_ids: skillIds,
     }
     try {
       if (employee) await api(`/api/employees/${employee.id}`, { method: 'PATCH', body })
@@ -132,6 +176,29 @@ function EmployeeModal({
             <label>Active</label>
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
           </div>
+        </div>
+        <h2>Skills</h2>
+        <div className="row">
+          {allSkills.map((s) => (
+            <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: 'var(--ink)' }}>
+              <input
+                type="checkbox"
+                checked={skillIds.includes(s.id)}
+                onChange={(e) =>
+                  setSkillIds(e.target.checked ? [...skillIds, s.id] : skillIds.filter((id) => id !== s.id))
+                }
+              />
+              {s.name}
+            </label>
+          ))}
+          <input
+            value={newSkill}
+            onChange={(e) => setNewSkill(e.target.value)}
+            placeholder="new skill (e.g. dialing)"
+            style={{ width: 170 }}
+            onKeyDown={(e) => e.key === 'Enter' && addSkill()}
+          />
+          <button className="small secondary" onClick={addSkill} disabled={!newSkill.trim()}>+ skill</button>
         </div>
         {employee && <AvailabilityEditor employeeId={employee.id} />}
         {employee && <TimeOffEditor employeeId={employee.id} />}

@@ -24,7 +24,7 @@ class SPAStaticFiles(StaticFiles):
 
 from . import models
 from .db import Base, SessionLocal, engine
-from .routers import auth, employees, imports, ratings, schedules, settings, shifts
+from .routers import auth, employees, imports, ratings, schedules, settings, shifts, templates
 
 DEFAULT_LEVELS = [
     # (name, rank, counts_for_rating) — ranks are editable in Settings
@@ -62,8 +62,30 @@ def seed_defaults() -> None:
         db.close()
 
 
+# columns added after the initial release; create_all doesn't alter existing
+# tables, so add them in place for databases created by older versions
+_NEW_COLUMNS = [
+    ("solver_config", "max_day_minutes", "INTEGER NOT NULL DEFAULT 480"),
+    ("solver_config", "max_consecutive_days", "INTEGER NOT NULL DEFAULT 6"),
+]
+
+
+def migrate_columns() -> None:
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(engine)
+    with engine.begin() as conn:
+        for table, column, ddl in _NEW_COLUMNS:
+            if not inspector.has_table(table):
+                continue
+            existing = {c["name"] for c in inspector.get_columns(table)}
+            if column not in existing:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+
+
 def create_app() -> FastAPI:
     Base.metadata.create_all(engine)
+    migrate_columns()
     seed_defaults()
 
     app = FastAPI(title="OPM — Yeems Coffee scheduling")
@@ -73,7 +95,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    for router in (auth, employees, shifts, schedules, imports, ratings, settings):
+    for router in (auth, employees, shifts, schedules, imports, ratings, settings, templates):
         app.include_router(router.router)
 
     dist = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
