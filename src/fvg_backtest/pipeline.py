@@ -109,11 +109,10 @@ def load_bars(
     *,
     timeframe: str = "1m",
 ) -> tuple[pl.DataFrame, DataQualityReport | None]:
+    config.validate_runnable()
     provider = provider or make_provider(config, clock)
-    start_d = date.fromisoformat(config.start) if config.start else None
-    end_d = date.fromisoformat(config.end) if config.end else None
-    if start_d is None or end_d is None:
-        raise ValueError("config.start and config.end are required to load data")
+    start_d = date.fromisoformat(config.start)
+    end_d = date.fromisoformat(config.end)
 
     # reach back one session so the first day has Globex context
     start = clock.ny_datetime(start_d - timedelta(days=4), "18:00").astimezone(UTC)
@@ -179,6 +178,7 @@ def run_backtest(
     keep_bars: bool = False,
     finer_bars: pl.DataFrame | None = None,
 ) -> RunOutput:
+    config.validate_runnable()
     calendar = calendar or TradingCalendar()
     clock = SessionClock(config=config.sessions, calendar=calendar)
     quality = None

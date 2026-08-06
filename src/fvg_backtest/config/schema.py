@@ -450,10 +450,27 @@ class AppConfig(StrictModel):
 
     @model_validator(mode="after")
     def _check(self) -> "AppConfig":
-        if self.contract_mode == "DATED" and not self.contract:
-            raise ValueError("contract_mode=DATED requires `contract` (e.g. NQH25)")
         if self.instrument not in self.instruments:
             raise ValueError(f"instrument {self.instrument!r} missing from instruments map")
+        return self
+
+    def validate_runnable(self) -> "AppConfig":
+        """Check the cross-field requirements needed to actually run.
+
+        These are deliberately *not* assignment validators: editing a config
+        passes through half-finished states (switching to DATED before
+        picking a contract, say), and a UI must be free to do that. The
+        constraints are enforced where they matter — at run time.
+        """
+        if self.contract_mode == "DATED" and not self.contract:
+            raise ValueError(
+                "contract_mode=DATED requires `contract` (e.g. NQH25); "
+                "set one or switch to CONTINUOUS"
+            )
+        if not self.start or not self.end:
+            raise ValueError("`start` and `end` dates are required to run a backtest")
+        if self.start > self.end:
+            raise ValueError(f"start {self.start} is after end {self.end}")
         return self
 
     @property

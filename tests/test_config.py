@@ -51,11 +51,31 @@ def test_yaml_roundtrip_and_overlay(tmp_path, config: AppConfig):
     assert merged.significance.type_a.minimum_preservation_ratio == 0.50
 
 
-def test_dated_mode_requires_contract():
-    with pytest.raises(ValueError):
-        AppConfig(contract_mode="DATED")
-    cfg = AppConfig(contract_mode="DATED", contract="NQH25")
-    assert cfg.contract == "NQH25"
+def test_dated_mode_requires_a_contract_at_run_time():
+    cfg = AppConfig(contract_mode="DATED", start="2025-01-06", end="2025-01-07")
+    with pytest.raises(ValueError, match="requires `contract`"):
+        cfg.validate_runnable()
+    cfg.contract = "NQH25"
+    assert cfg.validate_runnable() is cfg
+
+
+def test_editing_a_config_may_pass_through_incomplete_states():
+    """A UI sets fields one at a time; assignment must not fight the order."""
+    cfg = AppConfig()
+    cfg.contract_mode = "DATED"          # no contract yet — allowed
+    assert cfg.contract is None
+    cfg.contract = "NQH25"               # …and now it is complete
+    cfg.start, cfg.end = "2025-01-06", "2025-01-31"
+    assert cfg.validate_runnable().contract == "NQH25"
+
+
+def test_run_time_validation_checks_dates():
+    cfg = AppConfig(start=None, end=None)
+    with pytest.raises(ValueError, match="`start` and `end`"):
+        cfg.validate_runnable()
+    cfg.start, cfg.end = "2025-03-01", "2025-01-01"
+    with pytest.raises(ValueError, match="is after end"):
+        cfg.validate_runnable()
 
 
 def test_dotted_path_access(config: AppConfig):
