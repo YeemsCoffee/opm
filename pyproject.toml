@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fvg-backtest"
+version = "0.1.0"
+description = "Local backtesting & strategy research for the ICT-style First Presented Fair Value Gap strategy on NQ / MNQ futures"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "polars>=1.10",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "duckdb>=1.0",
+    "pyarrow>=16",
+    "plotly>=5.22",
+    "streamlit>=1.38",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "databento>=0.39",
+    "scikit-learn>=1.5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+fvg-backtest = "fvg_backtest.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+    "ignore::DeprecationWarning:dateutil.*",
+]

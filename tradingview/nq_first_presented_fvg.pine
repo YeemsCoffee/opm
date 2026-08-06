@@ -1,0 +1,471 @@
+// @version=6
+// =============================================================================
+// First Presented Significant FVG — NQ / MNQ visual companion
+// =============================================================================
+// Visual validation only. The Python application (fvg-backtest) is the
+// research source of truth; this script exists so you can eyeball the same
+// setup on a TradingView chart.
+//
+// Apply to a 1-minute NQ or MNQ chart. Signals use completed candles only:
+// every zone, marker and alert is evaluated on barstate.isconfirmed, so
+// nothing repaints and no future data is read.
+//
+// What it draws
+//   - the first significant FVG at/after 09:30 New York, kept for the session
+//   - Type A / Type B / A+B classification with the measurements behind it
+//   - the prior qualifying wick that satisfied Type B
+//   - proximal, midpoint and distal boundaries
+//   - every inversion and re-inversion (completed close through the zone)
+//   - proposed entry, stop and target, with target age and R distance
+//   - the 09:30 opening price, both opening ranges, and the overnight high/low
+//
+// Alerts: formation, entry touch, inversion, stop, target.
+// =============================================================================
+
+indicator("First Presented FVG (NQ/MNQ)", overlay = true, max_lines_count = 500,
+          max_labels_count = 500, max_boxes_count = 200)
+
+// ---------------------------------------------------------------------------
+// inputs — mirror config/default.yaml
+// ---------------------------------------------------------------------------
+gSession   = "Session"
+tzInput    = input.string("America/New_York", "Timezone",                group = gSession)
+cashOpen   = input.session("0930-0931",       "Cash open minute",        group = gSession)
+searchWin  = input.session("0930-1600",       "FVG search window",       group = gSession)
+cashWin    = input.session("0930-1600",       "Cash session",            group = gSession)
+premktWin  = input.session("0400-0930",       "Premarket",               group = gSession)
+overnightW = input.session("1800-0400",       "Overnight",               group = gSession)
+allAfter   = input.bool(true, "All three candles at/after the open",     group = gSession,
+     tooltip = "Off: only candle 3 must complete after the search start.")
+
+gFvg       = "FVG & significance"
+atrLen     = input.int(20,    "ATR length",                    minval = 2,   group = gFvg)
+minGapAtr  = input.float(0.10,"Type A · minimum gap (ATR)",    minval = 0.0, step = 0.01, group = gFvg)
+minPresRat = input.float(0.50,"Type A · minimum preservation", minval = 0.0, maxval = 1.0, step = 0.05, group = gFvg)
+wickLookbk = input.int(15,    "Type B · prior wick lookback",  minval = 1,   group = gFvg)
+minWickAtr = input.float(0.15,"Type B · minimum wick (ATR)",   minval = 0.0, step = 0.01, group = gFvg)
+minWickShr = input.float(0.40,"Type B · minimum wick share",   minval = 0.0, maxval = 1.0, step = 0.05, group = gFvg)
+minOverlap = input.float(0.25,"Type B · minimum gap overlap",  minval = 0.0, maxval = 1.0, step = 0.05, group = gFvg)
+strictIneq = input.bool(true, "Strict inequality (a touch is not a gap)", group = gFvg)
+invertOnEq = input.bool(false,"A close exactly on the boundary inverts",  group = gFvg)
+
+gTrade     = "Entry, stop, target"
+entryModel = input.string("PROXIMAL_EDGE", "Entry model",
+     options = ["PROXIMAL_EDGE", "MIDPOINT", "DISTAL_EDGE"], group = gTrade)
+invStopMdl = input.string("OPPOSITE_FVG_EDGE_PLUS_BUFFER", "Inversion stop model",
+     options = ["OPPOSITE_FVG_EDGE_PLUS_BUFFER", "INVERSION_CANDLE_EXTREME_PLUS_BUFFER",
+                "ORIGINAL_CANDLE_1_EXTREME"], group = gTrade)
+bufTicks   = input.float(4.0, "Inversion stop buffer (ticks)", minval = 0.0, group = gTrade)
+pivotK     = input.int(1,     "Pivot strength (k x k)", minval = 1, maxval = 3, group = gTrade)
+liqLookbk  = input.int(60,    "Liquidity lookback (minutes)",  minval = 5, group = gTrade)
+minTgtAge  = input.int(5,     "Minimum target age (minutes)",  minval = 0, group = gTrade)
+
+gDraw      = "Drawing"
+showLevels = input.bool(true, "Opening price, opening ranges, overnight high/low", group = gDraw)
+showPivots = input.bool(true, "Eligible liquidity pivots", group = gDraw)
+zoneBullCo = input.color(color.new(color.green, 82), "Bullish zone", group = gDraw)
+zoneBearCo = input.color(color.new(color.red,   82), "Bearish zone", group = gDraw)
+
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
+inSession(spec) => not na(time(timeframe.period, spec, tzInput))
+
+isNewSession = ta.change(time("D", cashWin, tzInput)) != 0
+
+atrValue  = ta.atr(atrLen)
+bodyTop   = math.max(open, close)
+bodyBot   = math.min(open, close)
+candleRng = high - low
+upWick    = high - bodyTop
+dnWick    = bodyBot - low
+tickSize  = syminfo.mintick
+
+inSearch  = inSession(searchWin)
+inCash    = inSession(cashWin)
+
+// ---------------------------------------------------------------------------
+// session state
+// ---------------------------------------------------------------------------
+var float fvgLow      = na
+var float fvgHigh     = na
+var float fvgMid      = na
+var float c1Low       = na
+var float c1High      = na
+var int   fvgBar      = na
+var int   fvgTime     = na
+var bool  zoneBull    = na      // current directional state of the zone
+var bool  origBull    = na      // the zone's original direction
+var int   invCount    = 0
+var float atrAtForm   = na
+var string sigType    = ""
+var float gapAtr      = na
+var float presRatio   = na
+var int   wickBarIdx  = na
+var float wickOvlRat  = na
+
+var float entryPx     = na
+var float stopPx      = na
+var float targetPx    = na
+var int   targetTime  = na
+var bool  entryFilled = false
+var bool  tradeClosed = false
+var int   armedBar    = na      // the order cannot fill before this bar
+
+var float openPrice   = na
+var float or5High     = na
+var float or5Low      = na
+var float or15High    = na
+var float or15Low     = na
+var float onHigh      = na
+var float onLow       = na
+var float pmHigh      = na
+var float pmLow       = na
+var int   cashBars    = 0
+
+var box   zoneBox     = na
+var line  midLine     = na
+var line  entryLine   = na
+var line  stopLine    = na
+var line  targetLine  = na
+var label infoLabel   = na
+
+// ---------------------------------------------------------------------------
+// session reset
+// ---------------------------------------------------------------------------
+if isNewSession and barstate.isconfirmed
+    fvgLow      := na
+    fvgHigh     := na
+    fvgMid      := na
+    c1Low       := na
+    c1High      := na
+    fvgBar      := na
+    fvgTime     := na
+    zoneBull    := na
+    origBull    := na
+    invCount    := 0
+    atrAtForm   := na
+    sigType     := ""
+    gapAtr      := na
+    presRatio   := na
+    wickBarIdx  := na
+    wickOvlRat  := na
+    entryPx     := na
+    stopPx      := na
+    targetPx    := na
+    targetTime  := na
+    entryFilled := false
+    tradeClosed := false
+    armedBar    := na
+    openPrice   := na
+    or5High     := na
+    or5Low      := na
+    or15High    := na
+    or15Low     := na
+    onHigh      := na
+    onLow       := na
+    pmHigh      := na
+    pmLow       := na
+    cashBars    := 0
+    zoneBox     := na
+    midLine     := na
+    entryLine   := na
+    stopLine    := na
+    targetLine  := na
+    infoLabel   := na
+
+// ---------------------------------------------------------------------------
+// context levels (completed candles only)
+// ---------------------------------------------------------------------------
+if barstate.isconfirmed
+    if inSession(overnightW)
+        onHigh := na(onHigh) ? high : math.max(onHigh, high)
+        onLow  := na(onLow)  ? low  : math.min(onLow,  low)
+    if inSession(premktWin)
+        pmHigh := na(pmHigh) ? high : math.max(pmHigh, high)
+        pmLow  := na(pmLow)  ? low  : math.min(pmLow,  low)
+    if inCash
+        cashBars := cashBars + 1
+        if cashBars == 1
+            openPrice := open
+        if cashBars <= 5
+            or5High := na(or5High) ? high : math.max(or5High, high)
+            or5Low  := na(or5Low)  ? low  : math.min(or5Low,  low)
+        if cashBars <= 15
+            or15High := na(or15High) ? high : math.max(or15High, high)
+            or15Low  := na(or15Low)  ? low  : math.min(or15Low,  low)
+
+// ---------------------------------------------------------------------------
+// pivots — confirmed only after k bars have closed on the right
+// ---------------------------------------------------------------------------
+pivotHigh = ta.pivothigh(high, pivotK, pivotK)
+pivotLow  = ta.pivotlow(low, pivotK, pivotK)
+
+var array<float> highLevels = array.new<float>()
+var array<int>   highTimes  = array.new<int>()
+var array<bool>  highTaken  = array.new<bool>()
+var array<float> lowLevels  = array.new<float>()
+var array<int>   lowTimes   = array.new<int>()
+var array<bool>  lowTaken   = array.new<bool>()
+
+if barstate.isconfirmed
+    if not na(pivotHigh)
+        array.push(highLevels, pivotHigh)
+        array.push(highTimes,  time[pivotK])
+        array.push(highTaken,  false)
+    if not na(pivotLow)
+        array.push(lowLevels, pivotLow)
+        array.push(lowTimes,  time[pivotK])
+        array.push(lowTaken,  false)
+    // sweeps: trading beyond a level takes it out of play
+    if array.size(highLevels) > 0
+        for i = 0 to array.size(highLevels) - 1
+            if not array.get(highTaken, i) and high > array.get(highLevels, i)
+                array.set(highTaken, i, true)
+    if array.size(lowLevels) > 0
+        for i = 0 to array.size(lowLevels) - 1
+            if not array.get(lowTaken, i) and low < array.get(lowLevels, i)
+                array.set(lowTaken, i, true)
+
+// nearest untaken level beyond `from`, formed inside the lookback window
+nearestTarget(bool wantHigh, float from) =>
+    float best     = na
+    int   bestTime = na
+    levels = wantHigh ? highLevels : lowLevels
+    times  = wantHigh ? highTimes  : lowTimes
+    taken  = wantHigh ? highTaken  : lowTaken
+    if array.size(levels) > 0
+        for i = 0 to array.size(levels) - 1
+            price = array.get(levels, i)
+            when  = array.get(times, i)
+            ageMs = time - when
+            ok    = not array.get(taken, i)
+                     and ageMs >= minTgtAge * 60000
+                     and ageMs <= liqLookbk * 60000
+                     and (wantHigh ? price > from : price < from)
+            if ok and (na(best) or math.abs(price - from) < math.abs(best - from))
+                best     := price
+                bestTime := when
+    [best, bestTime]
+
+// ---------------------------------------------------------------------------
+// Type B — does any prior wick reach into the candidate gap?
+// ---------------------------------------------------------------------------
+typeBCheck(float zLow, float zHigh, float gapW) =>
+    bool  found   = false
+    int   bestIdx = na
+    float bestRat = na
+    if gapW > 0
+        // candle 1 sits at index 2, so prior candles start at index 3
+        for j = 3 to wickLookbk + 2
+            bTop   = math.max(open[j], close[j])
+            bBot   = math.min(open[j], close[j])
+            rng    = high[j] - low[j]
+            aj     = atrValue[j]
+            upLen  = high[j] - bTop
+            dnLen  = bBot - low[j]
+            upOvl  = math.max(0.0, math.min(high[j], zHigh) - math.max(bTop, zLow))
+            dnOvl  = math.max(0.0, math.min(bBot, zHigh) - math.max(low[j], zLow))
+            upOk   = rng > 0 and aj > 0 and upLen / aj >= minWickAtr
+                      and upLen / rng >= minWickShr and upOvl / gapW >= minOverlap
+            dnOk   = rng > 0 and aj > 0 and dnLen / aj >= minWickAtr
+                      and dnLen / rng >= minWickShr and dnOvl / gapW >= minOverlap
+            if (upOk or dnOk) and not found
+                found   := true
+                bestIdx := j
+                bestRat := upOk ? upOvl / gapW : dnOvl / gapW
+    [found, bestIdx, bestRat]
+
+// ---------------------------------------------------------------------------
+// detection — the first significant FVG of the session
+// ---------------------------------------------------------------------------
+gapUp   = strictIneq ? low > high[2]  : low >= high[2]
+gapDown = strictIneq ? high < low[2]  : high <= low[2]
+
+if barstate.isconfirmed and na(fvgLow) and inSearch and (gapUp or gapDown)
+    // the window rule: candle 1 is two bars back
+    candleOneOk = not allAfter or inSearch[2]
+    if candleOneOk
+        zLow   = gapUp ? high[2] : high
+        zHigh  = gapUp ? low     : low[2]
+        gapW   = zHigh - zLow
+        // Type A: size and how much of the gap the wicks left alone
+        bodyVoid = gapUp ? bodyBot - bodyTop[2] : bodyBot[2] - bodyTop
+        gAtr     = atrValue > 0 ? gapW / atrValue : 0.0
+        pres     = bodyVoid > 0 ? math.min(gapW / bodyVoid, 1.0) : 0.0
+        typeA    = gAtr >= minGapAtr and pres >= minPresRat
+        [typeB, wickIdx, ovlRat] = typeBCheck(zLow, zHigh, gapW)
+
+        if (typeA or typeB) and gapW >= tickSize
+            fvgLow     := zLow
+            fvgHigh    := zHigh
+            fvgMid     := (zLow + zHigh) / 2
+            c1Low      := low[2]
+            c1High     := high[2]
+            fvgBar     := bar_index
+            fvgTime    := time
+            zoneBull   := gapUp
+            origBull   := gapUp
+            atrAtForm  := atrValue
+            gapAtr     := gAtr
+            presRatio  := pres
+            wickBarIdx := wickIdx
+            wickOvlRat := ovlRat
+            sigType    := typeA and typeB ? "A+B" : typeA ? "A" : "B"
+            armedBar   := bar_index + 1     // candle 3 cannot fill its own order
+
+            entryPx := entryModel == "MIDPOINT" ? fvgMid :
+                       entryModel == "DISTAL_EDGE" ? (gapUp ? fvgLow : fvgHigh) :
+                       (gapUp ? fvgHigh : fvgLow)
+            stopPx  := gapUp ? c1Low : c1High
+            [tgt, tgtTime] = nearestTarget(gapUp, entryPx)
+            targetPx   := tgt
+            targetTime := tgtTime
+
+            zoneBox := box.new(fvgBar, fvgHigh, bar_index + 60, fvgLow,
+                 border_color = gapUp ? color.green : color.red,
+                 bgcolor = gapUp ? zoneBullCo : zoneBearCo, extend = extend.right)
+            midLine := line.new(fvgBar, fvgMid, bar_index + 60, fvgMid,
+                 color = color.gray, style = line.style_dotted, extend = extend.right)
+            if not na(wickBarIdx)
+                label.new(bar_index - wickBarIdx, high[wickBarIdx],
+                     "Type B wick\n" + str.tostring(ovlRat * 100, "#.0") + "% of gap",
+                     style = label.style_label_down, color = color.new(color.purple, 20),
+                     textcolor = color.white, size = size.tiny)
+
+            alert("First significant FVG formed (" + sigType + ")", alert.freq_once_per_bar)
+
+// ---------------------------------------------------------------------------
+// zone behaviour: mitigation never invalidates; only a close inverts
+// ---------------------------------------------------------------------------
+if barstate.isconfirmed and not na(fvgLow)
+    belowZone = invertOnEq ? close <= fvgLow  : close < fvgLow
+    aboveZone = invertOnEq ? close >= fvgHigh : close > fvgHigh
+    flipped   = false
+
+    if zoneBull and belowZone
+        zoneBull := false
+        flipped  := true
+    else if not zoneBull and aboveZone
+        zoneBull := true
+        flipped  := true
+
+    if flipped
+        invCount    := invCount + 1
+        entryFilled := false
+        tradeClosed := false
+        armedBar    := bar_index + 1      // no fill on the confirming candle
+
+        entryPx := entryModel == "MIDPOINT" ? fvgMid :
+                   entryModel == "DISTAL_EDGE" ? (zoneBull ? fvgLow : fvgHigh) :
+                   (zoneBull ? fvgHigh : fvgLow)
+        buffer  = bufTicks * tickSize
+        stopPx := invStopMdl == "INVERSION_CANDLE_EXTREME_PLUS_BUFFER" ?
+                       (zoneBull ? low - buffer : high + buffer) :
+                   invStopMdl == "ORIGINAL_CANDLE_1_EXTREME" ?
+                       (zoneBull ? c1Low : c1High) :
+                       (zoneBull ? fvgLow - buffer : fvgHigh + buffer)
+        [tgt, tgtTime] = nearestTarget(zoneBull, entryPx)
+        targetPx   := tgt
+        targetTime := tgtTime
+
+        label.new(bar_index, close,
+             (invCount == 1 ? "inversion" : "re-inversion #" + str.tostring(invCount))
+             + "\n" + (zoneBull ? "bullish" : "bearish"),
+             style = zoneBull ? label.style_label_up : label.style_label_down,
+             color = color.new(color.purple, 25), textcolor = color.white, size = size.tiny)
+        if not na(zoneBox)
+            box.set_bgcolor(zoneBox, zoneBull ? zoneBullCo : zoneBearCo)
+            box.set_border_color(zoneBox, zoneBull ? color.green : color.red)
+        alert("Zone inverted — now " + (zoneBull ? "bullish" : "bearish"),
+              alert.freq_once_per_bar)
+
+// ---------------------------------------------------------------------------
+// order state: fill, stop, target (completed candles, never before armedBar)
+// ---------------------------------------------------------------------------
+if barstate.isconfirmed and not na(entryPx) and not tradeClosed and bar_index >= armedBar
+    if not entryFilled
+        touched = zoneBull ? low <= entryPx : high >= entryPx
+        if touched
+            entryFilled := true
+            label.new(bar_index, entryPx, "entry " + str.tostring(entryPx, format.mintick),
+                 style = label.style_label_left, color = color.new(color.blue, 20),
+                 textcolor = color.white, size = size.tiny)
+            alert("Entry touched at " + str.tostring(entryPx, format.mintick),
+                  alert.freq_once_per_bar)
+    else
+        hitStop   = zoneBull ? low <= stopPx : high >= stopPx
+        hitTarget = not na(targetPx) and (zoneBull ? high >= targetPx : low <= targetPx)
+        // conservative: when both are touched in one candle, assume the stop
+        if hitStop
+            tradeClosed := true
+            label.new(bar_index, stopPx, "stop", style = label.style_label_left,
+                 color = color.new(color.red, 20), textcolor = color.white, size = size.tiny)
+            alert("Stop reached", alert.freq_once_per_bar)
+        else if hitTarget
+            tradeClosed := true
+            label.new(bar_index, targetPx, "target", style = label.style_label_left,
+                 color = color.new(color.green, 20), textcolor = color.white, size = size.tiny)
+            alert("Target reached", alert.freq_once_per_bar)
+
+// ---------------------------------------------------------------------------
+// drawing
+// ---------------------------------------------------------------------------
+if barstate.islast and not na(fvgLow)
+    riskPts = math.abs(entryPx - stopPx)
+    targetR = na(targetPx) or riskPts <= 0 ? na : math.abs(targetPx - entryPx) / riskPts
+    ageMin  = na(targetTime) ? na : math.round((time - targetTime) / 60000)
+
+    if not na(entryLine)
+        line.delete(entryLine)
+        line.delete(stopLine)
+    entryLine := line.new(fvgBar, entryPx, bar_index, entryPx,
+         color = color.blue, width = 2, extend = extend.right)
+    stopLine  := line.new(fvgBar, stopPx, bar_index, stopPx,
+         color = color.red, width = 1, style = line.style_dashed, extend = extend.right)
+    if not na(targetLine)
+        line.delete(targetLine)
+    if not na(targetPx)
+        targetLine := line.new(fvgBar, targetPx, bar_index, targetPx,
+             color = color.green, width = 1, style = line.style_dashed, extend = extend.right)
+
+    if not na(infoLabel)
+        label.delete(infoLabel)
+    infoLabel := label.new(bar_index, fvgHigh,
+         "Type " + sigType
+         + "  ·  gap " + str.tostring(fvgHigh - fvgLow, format.mintick)
+         + " (" + str.tostring(gapAtr, "#.00") + " ATR)"
+         + "\npreservation " + str.tostring(presRatio, "#.00")
+         + "  ·  inversions " + str.tostring(invCount)
+         + "\nstate " + (zoneBull ? "bullish" : "bearish")
+         + (na(targetPx) ? "\ntarget: NO_TARGET"
+              : "\ntarget " + str.tostring(targetPx, format.mintick)
+                + "  ·  " + str.tostring(targetR, "#.00") + "R"
+                + "  ·  age " + str.tostring(ageMin) + "m"),
+         style = label.style_label_down, color = color.new(color.black, 15),
+         textcolor = color.white, size = size.small)
+
+plot(showLevels ? openPrice : na, "09:30 open",     color = color.new(color.black, 30), style = plot.style_stepline)
+plot(showLevels ? or5High   : na, "OR 5m high",     color = color.new(color.blue, 55),  style = plot.style_stepline)
+plot(showLevels ? or5Low    : na, "OR 5m low",      color = color.new(color.blue, 55),  style = plot.style_stepline)
+plot(showLevels ? or15High  : na, "OR 15m high",    color = color.new(color.blue, 25),  style = plot.style_stepline)
+plot(showLevels ? or15Low   : na, "OR 15m low",     color = color.new(color.blue, 25),  style = plot.style_stepline)
+plot(showLevels ? onHigh    : na, "Overnight high", color = color.new(color.gray, 25),  style = plot.style_stepline)
+plot(showLevels ? onLow     : na, "Overnight low",  color = color.new(color.gray, 25),  style = plot.style_stepline)
+
+plotshape(showPivots and not na(pivotHigh), "Swing high", shape.triangledown,
+     location.abovebar, color.new(color.orange, 40), offset = -pivotK, size = size.tiny)
+plotshape(showPivots and not na(pivotLow), "Swing low", shape.triangleup,
+     location.belowbar, color.new(color.orange, 40), offset = -pivotK, size = size.tiny)
+
+// ---------------------------------------------------------------------------
+// alert conditions (also available as alert() calls above)
+// ---------------------------------------------------------------------------
+alertcondition(not na(fvgLow) and na(fvgLow[1]), "FVG formed",
+     "First significant FVG formed after the cash open")
+alertcondition(entryFilled and not entryFilled[1], "Entry touched",
+     "Price reached the proposed entry")
+alertcondition(invCount != invCount[1], "Zone inverted",
+     "The zone inverted on a completed close through the opposite boundary")
+alertcondition(tradeClosed and not tradeClosed[1], "Trade closed",
+     "The simulated trade reached its stop or target")

@@ -1,0 +1,8 @@
+# NQ overlay — apply on top of config/default.yaml:
+#   fvg-backtest run --symbol NQ --config config/nq.yaml
+instrument: NQ
+contract_mode: CONTINUOUS
+data:
+  provider: databento
+execution:
+  mode: ONE_MINUTE_CONSERVATIVE

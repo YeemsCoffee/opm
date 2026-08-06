@@ -1,9 +1,16 @@
 __pycache__/
 *.pyc
 .venv/
-*.db
-backend/.secret
 .pytest_cache/
-node_modules/
-frontend/dist/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# local environment / secrets
 .env
+
+# local data & outputs (regenerate with the CLI)
+data_cache/
+runs/
+*.duckdb

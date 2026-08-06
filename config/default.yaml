@@ -1,0 +1,227 @@
+# ---------------------------------------------------------------------------
+# First Presented FVG research — resolved default configuration.
+#
+# This file mirrors the schema defaults (src/fvg_backtest/config/schema.py)
+# so every knob is visible and editable in one place.  config/nq.yaml and
+# config/mnq.yaml overlay it.  The dashboard can import/export this format.
+# ---------------------------------------------------------------------------
+
+instrument: NQ
+contract_mode: CONTINUOUS      # DATED | CONTINUOUS
+contract: null                 # e.g. NQH25 when contract_mode: DATED
+start: null                    # ISO date, e.g. 2025-01-01
+end: null
+
+data:
+  provider: csv                # databento | csv | parquet | synthetic
+  path: null                   # file or directory for csv/parquet providers
+  cache_dir: data_cache
+  signal_resolution: 1m
+  execution_resolution: 1m     # 1m | 1s | tick (must match execution.mode)
+  validate_quality: true
+  fail_on_quality_errors: false
+
+sessions:
+  timezone: America/New_York
+  globex_session_start: "18:00"
+  globex_session_end: "17:00"
+  maintenance_break_start: "17:00"
+  maintenance_break_end: "18:00"
+  premarket_start: "04:00"
+  cash_open: "09:30"
+  cash_close: "16:00"
+  fvg_search_start: "09:30"
+  fvg_search_end: "16:00"
+  trade_management_end: "16:00"
+  include_globex_data_for_indicators: true
+  include_premarket_for_liquidity: true
+
+rolls:
+  method: HIGHEST_VOLUME       # HIGHEST_VOLUME | FIXED_DAYS_BEFORE_EXPIRATION | USER_DEFINED_ROLL_CALENDAR
+  fixed_days_before_expiration: 8
+  roll_calendar: {}            # e.g. {NQH25: "2025-03-13"} last session as front
+  rollover_window_days: 5
+  exclude_rollover_sessions: false
+  exclude_expiration_week: false
+  back_adjust: false           # WARNING: back-adjustment shifts price levels and
+                               # distorts gap/swing/stop logic. Off by default.
+
+atr:
+  timeframe: 1m
+  length: 20
+  method: WILDER
+
+fvg:
+  all_candles_after_open: true # all 3 candles at/after fvg_search_start
+  strict_inequality: true
+  respect_min_tick: true
+
+significance:
+  type_a:
+    minimum_gap_atr: 0.10
+    minimum_preservation_ratio: 0.50
+  type_b:
+    prior_wick_lookback_minutes: 15
+    minimum_wick_atr: 0.15
+    minimum_wick_share: 0.40
+    minimum_fvg_overlap_ratio: 0.25
+
+zone:
+  invert_on_touch_close: false # close exactly on boundary does not invert
+
+liquidity:
+  lookback_minutes: 60
+  pivot_strength: 1            # 1 => 1x1, 2 => 2x2, 3 => 3x3
+  sweep_tolerance_ticks: 0.0
+  count_exact_touch_as_sweep: false
+
+targets:
+  min_target_age_minutes: 5
+  allow_touched_targets: true
+  max_lookback_minutes: 60
+
+equal_levels:
+  tolerance_mode: ticks        # ticks | atr
+  tolerance_ticks: 2.0
+  tolerance_atr: 0.02
+
+context:
+  opening_range_minutes_short: 5
+  opening_range_minutes_long: 15
+  whole_number_increment: 100.0
+  round_number_increment: 25.0
+
+entries:
+  model: PROXIMAL_EDGE         # PROXIMAL_EDGE | MIDPOINT | DISTAL_EDGE
+
+inversion:
+  enabled: true
+  entry_model: PROXIMAL_EDGE
+  stop_model: OPPOSITE_FVG_EDGE_PLUS_BUFFER
+  stop_buffer:
+    unit: ticks                # ticks | points | atr
+    ticks: 4.0
+    points: 1.0
+    atr: 0.10
+  max_reinversion_entries: 4
+
+orders:
+  max_order_age_minutes: 30
+  cancel_when_target_swept: true
+  one_position_at_a_time: true
+  quantity: 1
+
+execution:
+  mode: ONE_MINUTE_CONSERVATIVE  # ONE_MINUTE_CONSERVATIVE | ONE_SECOND_INTRABAR | TICK_INTRABAR
+  report_gross_and_net: true
+
+management:
+  full_exit_at_target: true
+  full_exit_at_stop: true
+  forced_exit_at_session_end: true
+
+labels:
+  clean_win:
+    max_mae_r: 0.35
+    max_entry_recross: 1
+    reach_half_r_within_minutes: 5
+    max_duration_minutes: 15
+  sweaty_win:
+    min_conditions: 2
+    mae_r_above: 0.50
+    entry_cross_at_least: 3
+    midpoint_cross_at_least: 3
+    fail_half_r_within_minutes: 10
+    duration_over_minutes: 20
+    near_stop_after_half_r_fraction: 0.25
+    post_entry_overlap_above: 0.60
+  immediate_failure:
+    max_mfe_r: 0.25
+  stalled:
+    after_minutes: 10
+    mfe_r_below: 0.50
+  ranging:
+    min_conditions: 2
+    entry_cross_at_least: 3
+    midpoint_cross_at_least: 3
+    efficiency_ratio_bars: 10
+    efficiency_ratio_below: 0.25
+    net_progress_r_below: 0.50
+    overlap_above: 0.60
+    no_resolution_bars: 10
+    direction_changes_at_least: 2
+
+range_research:
+  efficiency_windows: [5, 10, 20]
+  onset_window_bars: 10
+  onset_efficiency_below: 0.25
+  onset_overlap_above: 0.60
+  onset_net_progress_atr_below: 1.0
+
+walkforward:
+  development_days: 120
+  validation_days: 30
+  out_of_sample_days: 30
+  step_days: 30
+  min_trades_per_fold: 15
+  optimize_metric: expectancy_r
+  grid:
+    significance.type_a.minimum_gap_atr: [0.05, 0.10, 0.20]
+    significance.type_a.minimum_preservation_ratio: [0.25, 0.50, 0.75]
+
+models:
+  enabled: false
+  targets:
+    - probability_target_before_stop
+    - probability_clean_win
+    - probability_sweaty_trade
+    - probability_ranging_trade
+  algorithms: [logistic, hist_gradient_boosting]
+  train_fraction: 0.7
+
+runs_dir: runs
+
+# Instrument metadata: editable defaults, never buried in strategy logic.
+instruments:
+  NQ:
+    root: NQ
+    description: E-mini Nasdaq-100 futures
+    exchange: CME
+    tick_size: 0.25
+    point_value: 20.0
+    currency: USD
+    contract_months: [H, M, U, Z]
+    expiration_rule: THIRD_FRIDAY_930
+    trading_calendar: CME_EQUITY_INDEX
+    databento:
+      dataset: GLBX.MDP3
+      parent_symbol: NQ.FUT
+      continuous_symbol: NQ.c.0
+    costs:
+      commission_per_contract: 0.85
+      exchange_fees_per_contract: 1.64
+      spread_ticks: 1.0
+      entry_slippage_ticks: 0.0
+      stop_slippage_ticks: 1.0
+      target_slippage_ticks: 0.0
+  MNQ:
+    root: MNQ
+    description: Micro E-mini Nasdaq-100 futures
+    exchange: CME
+    tick_size: 0.25
+    point_value: 2.0
+    currency: USD
+    contract_months: [H, M, U, Z]
+    expiration_rule: THIRD_FRIDAY_930
+    trading_calendar: CME_EQUITY_INDEX
+    databento:
+      dataset: GLBX.MDP3
+      parent_symbol: MNQ.FUT
+      continuous_symbol: MNQ.c.0
+    costs:
+      commission_per_contract: 0.35
+      exchange_fees_per_contract: 0.37
+      spread_ticks: 1.0
+      entry_slippage_ticks: 0.0
+      stop_slippage_ticks: 1.0
+      target_slippage_ticks: 0.0
