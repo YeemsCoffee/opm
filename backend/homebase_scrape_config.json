@@ -1,7 +1,7 @@
 {
   "_comment": "Defines the path the sync script takes through Homebase and how it recognizes the data on each page. Edit this file (not the code) when Homebase's layout changes or these placeholder keywords need calibrating against the real site.",
   "base_url": "https://app.joinhomebase.com",
-  "login_url": "https://app.joinhomebase.com/login",
+  "login_url": "https://app.joinhomebase.com/accounts/sign-in",
   "hours_report": {
     "_comment": "Confirmed against a real Timesheets screenshot: columns are Team member / Worked / Total paid breaks / Total unpaid breaks / Issues / Actions. The total is embedded in the Worked cell as 'Total: X hrs Y min' — extracted by regex, not a dedicated hours column. Prefer the page's own 'Pay period' toggle over summing daily views once its URL/param is confirmed.",
     "path": "/timesheets",

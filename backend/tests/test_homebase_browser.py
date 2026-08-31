@@ -78,6 +78,19 @@ def _install_fake_browser(monkeypatch, tmp_path, page):
     monkeypatch.setattr(homebase_browser, "sync_playwright", lambda: _FakeSyncPlaywright(_FakeContext(page)))
 
 
+def test_session_logged_out_detection_matches_real_signin_url():
+    # the actual Homebase sign-in URL uses a hyphen, not an underscore —
+    # this regressed once already; keep it locked in
+    assert homebase_browser._session_looks_logged_out("https://app.joinhomebase.com/accounts/sign-in")
+    assert homebase_browser._session_looks_logged_out("https://app.joinhomebase.com/login")
+    assert not homebase_browser._session_looks_logged_out(
+        "https://app.joinhomebase.com/timesheets"
+    )
+    assert not homebase_browser._session_looks_logged_out(
+        "https://app.joinhomebase.com/schedule/employee/week/2026-08-31"
+    )
+
+
 def _seed_employees(db):
     db.add(Employee(name="Allen Tran"))
     db.add(Employee(name="Megan Lee"))

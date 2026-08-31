@@ -69,15 +69,20 @@ def login_interactively() -> None:
         print("A browser window has opened. Log into Homebase normally.")
         print("This window will close itself once you're logged in — leave it open until then.")
         try:
-            page.wait_for_url(lambda url: "login" not in url.lower(), timeout=LOGIN_WAIT_TIMEOUT_MS)
+            page.wait_for_url(lambda url: not _session_looks_logged_out(url), timeout=LOGIN_WAIT_TIMEOUT_MS)
             print("Login detected — session saved. You can close this and run the sync script.")
         except Exception:
             print("Timed out waiting for login. Run this script again when you're ready.")
         context.close()
 
 
+# Homebase's real sign-in page is /accounts/sign-in (hyphen) — checked
+# alongside a couple of common naming variants in case that path changes.
+_LOGGED_OUT_URL_MARKERS = ("sign-in", "sign_in", "signin", "login", "log-in")
+
+
 def _session_looks_logged_out(url: str) -> bool:
-    return "login" in url.lower() or "sign_in" in url.lower()
+    return any(marker in url.lower() for marker in _LOGGED_OUT_URL_MARKERS)
 
 
 def sync_once(db: Session, period_start: date | None = None, period_end: date | None = None) -> dict:
