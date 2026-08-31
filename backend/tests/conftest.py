@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.main import DEFAULT_LEVELS, app
-from app.models import Level, SlaConfig, SolverConfig
+from app.models import BreakConfig, BreakRule, Level, SlaConfig, SolverConfig
 
 
 @pytest.fixture()
@@ -25,6 +25,9 @@ def db():
         SlaConfig(target_seconds=300, adherence_goal=0.9, effective_from=date(2000, 1, 1))
     )
     session.add(SolverConfig())
+    session.add(BreakConfig())
+    session.add(BreakRule(min_shift_minutes=210, rest_breaks=1, meal_breaks=0))
+    session.add(BreakRule(min_shift_minutes=361, rest_breaks=2, meal_breaks=1))
     session.commit()
     yield session
     session.close()

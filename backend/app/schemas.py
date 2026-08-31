@@ -255,6 +255,76 @@ class RatingOut(BaseModel):
     shifts_total: int
 
 
+# --- breaks ---
+
+class BreakItemOut(ORMModel):
+    id: int
+    kind: str
+    start_min: int
+    end_min: int
+    paid: bool
+
+
+class RosterEntryOut(ORMModel):
+    id: int
+    date: date
+    name: str
+    role: str
+    start_min: int
+    end_min: int
+    source: str
+    breaks: list[BreakItemOut]
+
+
+class RosterEntryIn(BaseModel):
+    date: date
+    name: str
+    role: str = ""
+    start_min: int
+    end_min: int
+
+
+class BreakDayOut(BaseModel):
+    date: date
+    roster: list[RosterEntryOut]
+    homebase_configured: bool
+
+
+class BreakItemMove(BaseModel):
+    start_min: int
+
+
+class BreakConfigOut(ORMModel):
+    rest_minutes: int
+    meal_minutes: int
+    edge_pad_minutes: int
+    min_gap_minutes: int
+    max_concurrent: int
+    meal_by_minute: int
+
+
+class BreakConfigIn(BaseModel):
+    rest_minutes: int | None = None
+    meal_minutes: int | None = None
+    edge_pad_minutes: int | None = None
+    min_gap_minutes: int | None = None
+    max_concurrent: int | None = None
+    meal_by_minute: int | None = None
+
+
+class BreakRuleOut(ORMModel):
+    id: int
+    min_shift_minutes: int
+    rest_breaks: int
+    meal_breaks: int
+
+
+class BreakRuleIn(BaseModel):
+    min_shift_minutes: int
+    rest_breaks: int
+    meal_breaks: int
+
+
 # --- settings ---
 
 class SlaIn(BaseModel):

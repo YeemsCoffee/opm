@@ -103,6 +103,14 @@ tr:last-child td { border-bottom: 0; }
 .bar-track { background: var(--line); height: 8px; border-radius: 4px; position: relative; width: 160px; }
 .bar { position: absolute; top: 0; height: 8px; border-radius: 4px; }
 
+.print-only { display: none; }
+@media print {
+  .sidebar, .no-print { display: none !important; }
+  .print-only { display: inline; }
+  .main { padding: 0; max-width: none; }
+  .panel { border: 0; }
+}
+
 .login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
 .login-box { width: 340px; }
 .login-box input { width: 100%; margin-bottom: 10px; }

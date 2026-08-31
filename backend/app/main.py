@@ -24,7 +24,17 @@ class SPAStaticFiles(StaticFiles):
 
 from . import models
 from .db import Base, SessionLocal, engine
-from .routers import auth, employees, imports, ratings, schedules, settings, shifts, templates
+from .routers import (
+    auth,
+    breaks,
+    employees,
+    imports,
+    ratings,
+    schedules,
+    settings,
+    shifts,
+    templates,
+)
 
 DEFAULT_LEVELS = [
     # (name, rank, counts_for_rating) — ranks are editable in Settings
@@ -57,6 +67,13 @@ def seed_defaults() -> None:
             )
         if not db.scalar(select(models.SolverConfig)):
             db.add(models.SolverConfig())
+        if not db.scalar(select(models.BreakConfig)):
+            db.add(models.BreakConfig())
+        if not db.scalar(select(models.BreakRule)):
+            # seeded from observed practice: 3.5h+ shifts get one paid 10;
+            # over 6h gets two paid 10s and the unpaid 30 meal (CA-style)
+            db.add(models.BreakRule(min_shift_minutes=210, rest_breaks=1, meal_breaks=0))
+            db.add(models.BreakRule(min_shift_minutes=361, rest_breaks=2, meal_breaks=1))
         db.commit()
     finally:
         db.close()
@@ -95,7 +112,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    for router in (auth, employees, shifts, schedules, imports, ratings, settings, templates):
+    for router in (auth, breaks, employees, shifts, schedules, imports, ratings, settings, templates):
         app.include_router(router.router)
 
     dist = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")

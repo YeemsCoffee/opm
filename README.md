@@ -49,6 +49,44 @@ rating derived from **ticket time adherence**.
 Employees also carry manager-defined **skills** (dialing, steaming, …) as
 checkboxes, and per-day-of-week availability windows.
 
+## Break schedules
+
+The **Breaks** page builds the day's break schedule. Load the roster three
+ways — **Pull from Homebase**, **From app schedule** (this app's own
+published schedule), or by typing people in — then **Generate breaks**.
+
+A CP-SAT solver places each person's entitled breaks so that:
+
+- entitlement follows configurable rules by shift length (seeded from your
+  timesheets: 3.5h+ → one paid 10; 6h+ → two paid 10s and an unpaid 30)
+- **never more than one person on break at a time** (configurable), so the
+  floor is always covered
+- breaks stay clear of shift start/end (45 min default) and are spaced at
+  least 90 min apart for the same person
+- **meal breaks start before the 5th hour ends** (California-style rule)
+- breaks land in **ticket-demand lulls** — the same hourly demand model the
+  scheduler uses, so nobody goes on break during the 8–10am rush
+
+Managers can drag any break to a different time (it must stay inside the
+shift) and print the result for the bar.
+
+### Homebase connection
+
+Homebase issues API keys through their support/sales team on the Enterprise
+plan — there is no self-serve signup and no public MCP server, so the
+integration reads credentials from the environment:
+
+```
+HOMEBASE_API_KEY=...          # key Homebase issues you
+HOMEBASE_LOCATION_UUID=...    # your location's UUID
+HOMEBASE_API_BASE=...         # optional, defaults to https://api.joinhomebase.com
+```
+
+Until those are set, the "Pull from Homebase" button is disabled and the
+other two roster sources work normally. The response parser is defensive
+about field names (`start_at`/`start_time`/`starts_at`, etc.) since the
+exact payload can only be confirmed against a live key.
+
 ## Running it
 
 ```bash
@@ -101,6 +139,8 @@ backend/app/
     demand.py          # tickets-per-hour forecast for shift weighting
     solver.py          # OR-Tools CP-SAT schedule generation
     suggestions.py     # ranked candidates for unfilled slots
+    breaks.py          # CP-SAT break scheduling (staggered, demand-aware)
+    homebase.py        # Homebase API connector for the day's roster
 backend/tests/         # importer, ratings, solver and API tests
 frontend/src/pages/    # React UI (schedule board, employees, ratings…)
 ```

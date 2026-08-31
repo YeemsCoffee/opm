@@ -179,6 +179,31 @@ export interface Suggestion {
   softness: number
 }
 
+export interface BreakItem {
+  id: number
+  kind: 'rest' | 'meal'
+  start_min: number
+  end_min: number
+  paid: boolean
+}
+
+export interface RosterEntry {
+  id: number
+  date: string
+  name: string
+  role: string
+  start_min: number
+  end_min: number
+  source: string
+  breaks: BreakItem[]
+}
+
+export interface BreakDay {
+  date: string
+  roster: RosterEntry[]
+  homebase_configured: boolean
+}
+
 export interface Rating {
   employee_id: number
   employee_name: string

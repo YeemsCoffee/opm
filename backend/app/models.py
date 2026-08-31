@@ -287,6 +287,63 @@ class WorkSession(Base):
         return not any(b.start <= t < b.end for b in self.breaks)
 
 
+class BreakConfig(Base):
+    """Single-row knobs for the break scheduler."""
+
+    __tablename__ = "break_config"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    rest_minutes: Mapped[int] = mapped_column(Integer, default=10)
+    meal_minutes: Mapped[int] = mapped_column(Integer, default=30)
+    edge_pad_minutes: Mapped[int] = mapped_column(Integer, default=45)  # no breaks near shift edges
+    min_gap_minutes: Mapped[int] = mapped_column(Integer, default=90)  # between one person's breaks
+    max_concurrent: Mapped[int] = mapped_column(Integer, default=1)  # on break at the same time
+    meal_by_minute: Mapped[int] = mapped_column(Integer, default=300)  # meal starts before 5th hour ends
+
+
+class BreakRule(Base):
+    """Break entitlement by shift length: the longest matching rule wins."""
+
+    __tablename__ = "break_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    min_shift_minutes: Mapped[int] = mapped_column(Integer, unique=True)
+    rest_breaks: Mapped[int] = mapped_column(Integer, default=0)
+    meal_breaks: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class RosterEntry(Base):
+    """One person working one shift on one date, for break planning. Comes
+    from Homebase, from this app's schedule, or typed in by the manager."""
+
+    __tablename__ = "roster_entries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    name: Mapped[str] = mapped_column(String)
+    role: Mapped[str] = mapped_column(String, default="")
+    start_min: Mapped[int] = mapped_column(Integer)
+    end_min: Mapped[int] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(String, default="manual")  # homebase | internal | manual
+
+    breaks: Mapped[list["BreakPlanItem"]] = relationship(
+        back_populates="entry", cascade="all, delete-orphan", order_by="BreakPlanItem.start_min"
+    )
+
+
+class BreakPlanItem(Base):
+    __tablename__ = "break_plan_items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    roster_entry_id: Mapped[int] = mapped_column(ForeignKey("roster_entries.id"))
+    kind: Mapped[str] = mapped_column(String)  # rest | meal
+    start_min: Mapped[int] = mapped_column(Integer)
+    end_min: Mapped[int] = mapped_column(Integer)
+    paid: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    entry: Mapped[RosterEntry] = relationship(back_populates="breaks")
+
+
 class BreakInterval(Base):
     __tablename__ = "break_intervals"
 

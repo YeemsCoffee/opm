@@ -118,7 +118,9 @@ def create_employee(
     )
     db.add(e)
     db.flush()
-    db.add(EmployeeLevel(employee_id=e.id, level_id=body.level_id, effective_from=date.today()))
+    # first level applies to all history so new employees are schedulable
+    # (and attributable) for any date; later changes are effective-dated
+    db.add(EmployeeLevel(employee_id=e.id, level_id=body.level_id, effective_from=date(2000, 1, 1)))
     if body.skill_ids:
         _set_skills(db, e, body.skill_ids)
     db.commit()
