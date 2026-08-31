@@ -87,6 +87,85 @@ other two roster sources work normally. The response parser is defensive
 about field names (`start_at`/`start_time`/`starts_at`, etc.) since the
 exact payload can only be confirmed against a live key.
 
+## Homebase browser sync (live hours + shift swaps)
+
+Without an Enterprise Homebase account, there's no API for two other things
+managers need automated: **hours worked per employee, updated daily**, and
+**who picked up shifts released for coverage**. Since there's no public
+Homebase MCP server either, this reads the same pages a manager would look
+at by hand — via a real, Playwright-driven browser — on a schedule, instead
+of anyone uploading anything.
+
+**Read this before using it:** automating a login to a third-party
+dashboard instead of using its API is very likely against Homebase's Terms
+of Service, and can get an account flagged, rate-limited, or locked. This
+was a deliberate, discussed trade-off, not an oversight — consider using a
+dedicated Homebase login for this rather than your primary one.
+
+**How it avoids storing a password:** you log into Homebase yourself, once,
+in a real visible browser window that the setup script opens **on the same
+machine that will run the daily sync** (your PC — not a remote/cloud
+session, which would lose the session when it's reclaimed). That session
+is saved to a local browser profile folder; nothing about your password is
+ever written down, only what a browser itself keeps after a normal login.
+
+```powershell
+cd backend
+..\.venv\Scripts\python scripts\homebase_login.py
+```
+
+A Chrome window opens — log in normally, then close it (or let it close
+itself once login is detected).
+
+**Daily sync**, reusing that saved session, never logging in on its own:
+
+```powershell
+..\.venv\Scripts\python scripts\homebase_sync.py
+```
+
+Wire this to **Windows Task Scheduler** to run once a day automatically:
+Task Scheduler → Create Task → Trigger: Daily, whatever time → Action:
+Start a program → Program: the full path to
+`...\opm\.venv\Scripts\python.exe` → Arguments:
+`scripts\homebase_sync.py` → Start in: the full path to `...\opm\backend`.
+
+If the saved session expires, the sync stops touching data and reports it
+clearly — check the banner at the top of the Employees page, or the
+`/api/homebase-sync/status` endpoint — rather than guessing. Re-run the
+login script when that happens.
+
+**What each page's scrape does and doesn't need calibrating:**
+
+- **Hours (Timesheets report)** — confirmed working against a real
+  Homebase screenshot. The total is embedded in the "Worked" cell as
+  `Total: 8 hrs 20 min`; no-show rows (no "Total:" line) are correctly
+  skipped rather than counted as zero hours. Feeds a live "Hours
+  (Homebase)" column on the Employees page.
+- **Shift swaps** — the original plan assumed a separate trade-board
+  report; a real screenshot showed there isn't one. A covered shift
+  instead shows as a flagged cell (orange, warning icon, "Open Shift
+  approved") directly in the normal weekly Schedule Builder grid, under
+  the covering employee's row. `homebase_scrape_config.json`'s
+  `trade_board` section and `services/homebase_browser.py` are placeholders
+  pending: (a) whether the covering employee alone (visible from the row,
+  no click needed) is enough, or the original releaser is also wanted
+  (visible only after clicking the cell — more fragile to script), and
+  (b) the full set of marker states Homebase uses. **A failure here never
+  blocks or discards the hours sync** — the two are scraped and persisted
+  independently.
+
+Everything the scraper reads from (URLs, column-header keywords) lives in
+`backend/homebase_scrape_config.json`, not code, so recalibrating after a
+Homebase layout change is a config edit, not a redeploy.
+
+One-time setup on the machine that will run the sync:
+
+```powershell
+cd backend
+..\.venv\Scripts\pip install -r requirements.txt
+..\.venv\Scripts\playwright install chromium
+```
+
 ## Running it
 
 ```bash
@@ -140,13 +219,22 @@ backend/app/
     solver.py          # OR-Tools CP-SAT schedule generation
     suggestions.py     # ranked candidates for unfilled slots
     breaks.py          # CP-SAT break scheduling (staggered, demand-aware)
-    homebase.py        # Homebase API connector for the day's roster
+    homebase.py        # Homebase API connector for the day's roster (Enterprise plan)
+    homebase_browser.py       # Playwright driver: reuses a saved login session
+    homebase_table_parser.py  # pure HTML-table parsing, unit-tested without a browser
+  scripts/
+    homebase_login.py  # one-time: opens a real window for a human to log in
+    homebase_sync.py    # run daily by Task Scheduler; never logs in itself
+backend/homebase_scrape_config.json  # URLs + column keywords the sync reads — edit, don't redeploy
 backend/tests/         # importer, ratings, solver and API tests
 frontend/src/pages/    # React UI (schedule board, employees, ratings…)
 ```
 
 ## Roadmap
 
+- Shift-swap scraping: rewrite against the real Schedule Builder grid
+  (flagged "Open Shift approved" cells) once scope (picker only vs. also
+  who released it) and the full marker-state list are confirmed.
 - Adjusted +/- via ridge regression (separates individuals who always work
   together; raw on/off +/- inherits crewmate effects).
 - Per-shift skill requirements (skills are currently informational).

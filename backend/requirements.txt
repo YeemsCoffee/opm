@@ -1,6 +1,8 @@
+beautifulsoup4>=4.12
 fastapi>=0.110
 httpx>=0.27
 ortools>=9.9
+playwright>=1.40
 pytest>=8.0
 python-multipart>=0.0.9
 sqlalchemy>=2.0

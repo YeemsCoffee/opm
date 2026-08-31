@@ -356,6 +356,55 @@ class BreakInterval(Base):
     session: Mapped[WorkSession] = relationship(back_populates="breaks")
 
 
+class HomebaseSyncStatus(Base):
+    """Single-row status of the scheduled Homebase browser sync — surfaced
+    in the UI so a stale/failed sync is visible, not silent."""
+
+    __tablename__ = "homebase_sync_status"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_error: Mapped[str] = mapped_column(String, default="")
+    session_valid: Mapped[bool] = mapped_column(Boolean, default=False)
+    hours_rows_last_sync: Mapped[int] = mapped_column(Integer, default=0)
+    swaps_rows_last_sync: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class HoursSnapshot(Base):
+    """One employee's worked-hours total for a period, as scraped from the
+    Homebase hours report. Re-synced daily; latest row per (employee,
+    period) wins, so the employee profile always shows a live number."""
+
+    __tablename__ = "hours_snapshots"
+    __table_args__ = (UniqueConstraint("employee_name", "period_start", "period_end"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    employee_name: Mapped[str] = mapped_column(String, index=True)
+    period_start: Mapped[date] = mapped_column(Date)
+    period_end: Mapped[date] = mapped_column(Date)
+    hours: Mapped[float] = mapped_column(Float)
+    synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class ShiftSwap(Base):
+    """One shift that was released for coverage and picked up by someone,
+    as scraped from Homebase's trade/coverage board."""
+
+    __tablename__ = "shift_swaps"
+    __table_args__ = (UniqueConstraint("shift_date", "start_min", "end_min", "released_by", "covered_by"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    shift_date: Mapped[date] = mapped_column(Date, index=True)
+    start_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    released_by: Mapped[str] = mapped_column(String, default="")
+    covered_by: Mapped[str] = mapped_column(String, default="")
+    role: Mapped[str] = mapped_column(String, default="")
+    status: Mapped[str] = mapped_column(String, default="")  # raw status text from Homebase
+    synced_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class NoShow(Base):
     __tablename__ = "no_shows"
     __table_args__ = (UniqueConstraint("employee_id", "date", "reason"),)

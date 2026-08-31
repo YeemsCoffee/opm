@@ -28,6 +28,7 @@ from .routers import (
     auth,
     breaks,
     employees,
+    homebase_sync,
     imports,
     ratings,
     schedules,
@@ -74,6 +75,8 @@ def seed_defaults() -> None:
             # over 6h gets two paid 10s and the unpaid 30 meal (CA-style)
             db.add(models.BreakRule(min_shift_minutes=210, rest_breaks=1, meal_breaks=0))
             db.add(models.BreakRule(min_shift_minutes=361, rest_breaks=2, meal_breaks=1))
+        if not db.scalar(select(models.HomebaseSyncStatus)):
+            db.add(models.HomebaseSyncStatus())
         db.commit()
     finally:
         db.close()
@@ -112,7 +115,18 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    for router in (auth, breaks, employees, shifts, schedules, imports, ratings, settings, templates):
+    for router in (
+        auth,
+        breaks,
+        employees,
+        homebase_sync,
+        shifts,
+        schedules,
+        imports,
+        ratings,
+        settings,
+        templates,
+    ):
         app.include_router(router.router)
 
     dist = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")

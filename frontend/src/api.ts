@@ -204,6 +204,24 @@ export interface BreakDay {
   homebase_configured: boolean
 }
 
+export interface HomebaseStatus {
+  last_attempt_at: string | null
+  last_success_at: string | null
+  last_error: string
+  session_valid: boolean
+  hours_rows_last_sync: number
+  swaps_rows_last_sync: number
+}
+
+export interface HoursSnapshot {
+  employee_name: string
+  period_start: string
+  period_end: string
+  hours: number
+  synced_at: string
+  matched_employee_id: number | null
+}
+
 export interface Rating {
   employee_id: number
   employee_name: string

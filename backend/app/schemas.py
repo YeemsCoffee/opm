@@ -325,6 +325,40 @@ class BreakRuleIn(BaseModel):
     meal_breaks: int
 
 
+# --- Homebase browser sync ---
+
+class HomebaseStatusOut(ORMModel):
+    last_attempt_at: datetime | None
+    last_success_at: datetime | None
+    last_error: str
+    session_valid: bool
+    hours_rows_last_sync: int
+    swaps_rows_last_sync: int
+
+
+class HoursSnapshotOut(ORMModel):
+    employee_name: str
+    period_start: date
+    period_end: date
+    hours: float
+    synced_at: datetime
+    matched_employee_id: int | None = None
+
+
+class ShiftSwapOut(ORMModel):
+    id: int
+    shift_date: date
+    start_min: int | None
+    end_min: int | None
+    released_by: str
+    covered_by: str
+    role: str
+    status: str
+    synced_at: datetime
+    covered_by_employee_id: int | None = None
+    released_by_employee_id: int | None = None
+
+
 # --- settings ---
 
 class SlaIn(BaseModel):

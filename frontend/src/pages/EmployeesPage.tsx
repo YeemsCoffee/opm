@@ -6,10 +6,31 @@ import {
   WEEKDAYS,
   type AvailabilityWindow,
   type Employee,
+  type HomebaseStatus,
+  type HoursSnapshot,
   type Level,
   type Skill,
   type TimeOff,
 } from '../api'
+
+function HomebaseSyncBanner({ status }: { status: HomebaseStatus | null }) {
+  if (!status || !status.last_attempt_at) return null
+  if (!status.session_valid) {
+    return (
+      <div className="panel" style={{ background: 'var(--warn-bg)', borderColor: 'var(--warn-line)' }}>
+        <b>⚠ Homebase session expired.</b> Hours won't update until someone re-runs the login
+        script on the machine that syncs daily.
+      </div>
+    )
+  }
+  const synced = status.last_success_at ? new Date(status.last_success_at).toLocaleString() : 'never'
+  return (
+    <div className="panel muted" style={{ fontSize: 13 }}>
+      Homebase hours last synced {synced} ({status.hours_rows_last_sync} employees)
+      {status.last_error && <span style={{ color: 'var(--bad)' }}> · {status.last_error}</span>}
+    </div>
+  )
+}
 
 function DaysAvailable({ e }: { e: Employee }) {
   if (!e.availability.length) return <span className="muted">any day</span>
@@ -29,6 +50,8 @@ export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [levels, setLevels] = useState<Level[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
+  const [homebaseStatus, setHomebaseStatus] = useState<HomebaseStatus | null>(null)
+  const [hours, setHours] = useState<HoursSnapshot[]>([])
   const [editing, setEditing] = useState<Employee | null>(null)
   const [adding, setAdding] = useState(false)
   const [error, setError] = useState('')
@@ -37,8 +60,15 @@ export default function EmployeesPage() {
     api<Employee[]>('/api/employees').then(setEmployees).catch((e) => setError(e.message))
     api<Level[]>('/api/levels').then(setLevels).catch(() => {})
     api<Skill[]>('/api/skills').then(setSkills).catch(() => {})
+    api<HomebaseStatus>('/api/homebase-sync/status').then(setHomebaseStatus).catch(() => {})
+    api<HoursSnapshot[]>('/api/homebase-sync/hours').then(setHours).catch(() => {})
   }
   useEffect(load, [])
+
+  const hoursFor = (name: string) => {
+    const rows = hours.filter((h) => h.employee_name.toLowerCase() === name.toLowerCase())
+    return rows[0] // already sorted newest period first by the API
+  }
 
   return (
     <div>
@@ -48,6 +78,7 @@ export default function EmployeesPage() {
         each employee from their own account.
       </p>
       {error && <div className="error">{error}</div>}
+      <HomebaseSyncBanner status={homebaseStatus} />
       <div className="panel">
         <div className="row" style={{ marginBottom: 10 }}>
           <div className="grow" />
@@ -56,18 +87,26 @@ export default function EmployeesPage() {
         <table>
           <thead>
             <tr>
-              <th>Name</th><th>Level</th><th>Skills</th><th>Max hrs/wk</th><th>Target hrs/wk</th>
+              <th>Name</th><th>Level</th><th>Skills</th><th>Hours (Homebase)</th>
+              <th>Max hrs/wk</th><th>Target hrs/wk</th>
               <th>Days available</th><th>Availability</th><th>Status</th><th />
             </tr>
           </thead>
           <tbody>
-            {employees.map((e) => (
+            {employees.map((e) => {
+              const h = hoursFor(e.name)
+              return (
               <tr key={e.id}>
                 <td>{e.name}</td>
                 <td><span className="pill">{e.level?.name ?? '—'}</span></td>
                 <td>
                   {e.skills.length
                     ? e.skills.map((s) => <span className="pill" key={s.id} style={{ marginRight: 3 }}>{s.name}</span>)
+                    : <span className="muted">—</span>}
+                </td>
+                <td>
+                  {h
+                    ? <span title={`Period ${h.period_start} – ${h.period_end}, synced ${new Date(h.synced_at).toLocaleString()}`}>{h.hours.toFixed(1)}</span>
                     : <span className="muted">—</span>}
                 </td>
                 <td>{(e.max_week_minutes / 60).toFixed(0)}</td>
@@ -81,7 +120,8 @@ export default function EmployeesPage() {
                 <td>{e.active ? 'active' : <span className="muted">inactive</span>}</td>
                 <td><button className="small secondary" onClick={() => setEditing(e)}>Edit</button></td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>
