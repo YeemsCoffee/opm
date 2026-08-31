@@ -59,6 +59,13 @@ class SkillIn(BaseModel):
     name: str
 
 
+# --- locations ---
+
+class LocationOut(ORMModel):
+    id: int
+    name: str
+
+
 # --- employees ---
 
 class AvailabilityIn(BaseModel):
@@ -95,6 +102,7 @@ class EmployeeIn(BaseModel):
     target_week_minutes: int | None = None
     active: bool = True
     skill_ids: list[int] = []
+    location_id: int | None = None
 
 
 class EmployeeUpdate(BaseModel):
@@ -104,6 +112,7 @@ class EmployeeUpdate(BaseModel):
     target_week_minutes: int | None = None
     active: bool | None = None
     skill_ids: list[int] | None = None
+    location_id: int | None = None
 
 
 class EmployeeOut(ORMModel):
@@ -117,6 +126,7 @@ class EmployeeOut(ORMModel):
     level: LevelOut | None = None
     skills: list[SkillOut] = []
     availability: list[AvailabilityOut] = []
+    location: LocationOut | None = None
 
 
 # --- shifts ---

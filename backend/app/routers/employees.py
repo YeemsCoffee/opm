@@ -7,7 +7,17 @@ from sqlalchemy.orm import Session
 from .. import schemas
 from ..auth import current_user, require_manager
 from ..db import get_db
-from ..models import Availability, Employee, EmployeeLevel, EmployeeSkill, Level, Skill, TimeOff, User
+from ..models import (
+    Availability,
+    Employee,
+    EmployeeLevel,
+    EmployeeSkill,
+    Level,
+    Location,
+    Skill,
+    TimeOff,
+    User,
+)
 
 router = APIRouter(prefix="/api", tags=["employees"])
 
@@ -25,6 +35,7 @@ def _employee_out(e: Employee) -> dict:
         "level": lvl,
         "skills": e.skills,
         "availability": e.availability,
+        "location": e.location,
     }
 
 
@@ -53,6 +64,11 @@ def update_level(
         level.counts_for_rating = body.counts_for_rating
     db.commit()
     return level
+
+
+@router.get("/locations", response_model=list[schemas.LocationOut])
+def list_locations(_: User = Depends(current_user), db: Session = Depends(get_db)):
+    return db.scalars(select(Location).order_by(Location.name)).all()
 
 
 @router.get("/skills", response_model=list[schemas.SkillOut])
@@ -115,6 +131,7 @@ def create_employee(
         max_week_minutes=body.max_week_minutes,
         target_week_minutes=body.target_week_minutes,
         active=body.active,
+        location_id=body.location_id,
     )
     db.add(e)
     db.flush()
@@ -138,7 +155,7 @@ def update_employee(
     e = db.get(Employee, employee_id)
     if e is None:
         raise HTTPException(404, "Employee not found")
-    for attr in ("name", "max_week_minutes", "target_week_minutes", "active"):
+    for attr in ("name", "max_week_minutes", "target_week_minutes", "active", "location_id"):
         val = getattr(body, attr)
         if val is not None:
             setattr(e, attr, val)

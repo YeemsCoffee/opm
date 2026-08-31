@@ -78,6 +78,11 @@ export interface Skill {
   name: string
 }
 
+export interface Location {
+  id: number
+  name: string
+}
+
 export interface Employee {
   id: number
   name: string
@@ -89,6 +94,7 @@ export interface Employee {
   level: Level | null
   skills: Skill[]
   availability: AvailabilityWindow[]
+  location: Location | null
 }
 
 export interface AvailabilityWindow {

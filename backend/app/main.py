@@ -87,6 +87,7 @@ def seed_defaults() -> None:
 _NEW_COLUMNS = [
     ("solver_config", "max_day_minutes", "INTEGER NOT NULL DEFAULT 480"),
     ("solver_config", "max_consecutive_days", "INTEGER NOT NULL DEFAULT 6"),
+    ("employees", "location_id", "INTEGER"),
 ]
 
 

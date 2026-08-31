@@ -9,6 +9,7 @@ import {
   type HomebaseStatus,
   type HoursSnapshot,
   type Level,
+  type Location,
   type Skill,
   type TimeOff,
 } from '../api'
@@ -50,6 +51,7 @@ export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [levels, setLevels] = useState<Level[]>([])
   const [skills, setSkills] = useState<Skill[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
   const [homebaseStatus, setHomebaseStatus] = useState<HomebaseStatus | null>(null)
   const [hours, setHours] = useState<HoursSnapshot[]>([])
   const [editing, setEditing] = useState<Employee | null>(null)
@@ -60,6 +62,7 @@ export default function EmployeesPage() {
     api<Employee[]>('/api/employees').then(setEmployees).catch((e) => setError(e.message))
     api<Level[]>('/api/levels').then(setLevels).catch(() => {})
     api<Skill[]>('/api/skills').then(setSkills).catch(() => {})
+    api<Location[]>('/api/locations').then(setLocations).catch(() => {})
     api<HomebaseStatus>('/api/homebase-sync/status').then(setHomebaseStatus).catch(() => {})
     api<HoursSnapshot[]>('/api/homebase-sync/hours').then(setHours).catch(() => {})
   }
@@ -87,7 +90,7 @@ export default function EmployeesPage() {
         <table>
           <thead>
             <tr>
-              <th>Name</th><th>Level</th><th>Skills</th><th>Hours (Homebase)</th>
+              <th>Name</th><th>Location</th><th>Level</th><th>Skills</th><th>Hours (Homebase)</th>
               <th>Max hrs/wk</th><th>Target hrs/wk</th>
               <th>Days available</th><th>Availability</th><th>Status</th><th />
             </tr>
@@ -98,6 +101,7 @@ export default function EmployeesPage() {
               return (
               <tr key={e.id}>
                 <td>{e.name}</td>
+                <td>{e.location?.name ?? <span className="muted">—</span>}</td>
                 <td><span className="pill">{e.level?.name ?? '—'}</span></td>
                 <td>
                   {e.skills.length
@@ -129,6 +133,7 @@ export default function EmployeesPage() {
         <EmployeeModal
           employee={editing ?? undefined}
           levels={levels}
+          locations={locations}
           allSkills={skills}
           onSkillsChanged={() => api<Skill[]>('/api/skills').then(setSkills).catch(() => {})}
           onClose={() => { setEditing(null); setAdding(false) }}
@@ -142,6 +147,7 @@ export default function EmployeesPage() {
 function EmployeeModal({
   employee,
   levels,
+  locations,
   allSkills,
   onSkillsChanged,
   onClose,
@@ -149,6 +155,7 @@ function EmployeeModal({
 }: {
   employee?: Employee
   levels: Level[]
+  locations: Location[]
   allSkills: Skill[]
   onSkillsChanged: () => void
   onClose: () => void
@@ -156,6 +163,7 @@ function EmployeeModal({
 }) {
   const [name, setName] = useState(employee?.name ?? '')
   const [levelId, setLevelId] = useState(employee?.level?.id ?? levels[0]?.id ?? 0)
+  const [locationId, setLocationId] = useState<number | ''>(employee?.location?.id ?? '')
   const [maxHours, setMaxHours] = useState(employee ? employee.max_week_minutes / 60 : 40)
   const [targetHours, setTargetHours] = useState(
     employee?.target_week_minutes != null ? employee.target_week_minutes / 60 : '',
@@ -186,6 +194,7 @@ function EmployeeModal({
       target_week_minutes: targetHours === '' ? null : Math.round(Number(targetHours) * 60),
       active,
       skill_ids: skillIds,
+      location_id: locationId === '' ? null : locationId,
     }
     try {
       if (employee) await api(`/api/employees/${employee.id}`, { method: 'PATCH', body })
@@ -206,6 +215,13 @@ function EmployeeModal({
             <label>Level</label>
             <select value={levelId} onChange={(e) => setLevelId(Number(e.target.value))}>
               {levels.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label>Location</label>
+            <select value={locationId} onChange={(e) => setLocationId(e.target.value === '' ? '' : Number(e.target.value))}>
+              <option value="">—</option>
+              {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
           </div>
         </div>

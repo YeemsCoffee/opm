@@ -55,6 +55,13 @@ class EmployeeSkill(Base):
     skill_id: Mapped[int] = mapped_column(ForeignKey("skills.id"))
 
 
+class Location(Base):
+    __tablename__ = "locations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+
+
 class Employee(Base):
     __tablename__ = "employees"
 
@@ -65,7 +72,9 @@ class Employee(Base):
     max_week_minutes: Mapped[int] = mapped_column(Integer, default=2400)
     target_week_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     availability_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    location_id: Mapped[int | None] = mapped_column(ForeignKey("locations.id"), nullable=True)
 
+    location: Mapped[Location | None] = relationship()
     level_history: Mapped[list["EmployeeLevel"]] = relationship(
         back_populates="employee", cascade="all, delete-orphan", order_by="EmployeeLevel.effective_from"
     )

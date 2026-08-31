@@ -206,6 +206,11 @@ cd backend && ../.venv/bin/python -m pytest tests/
    highlighted gaps via suggestions → **Publish**.
 3. After each payroll period, import the new kitchen report + timesheets
    to keep ratings fresh.
+4. Whenever the roster changes (new hires, location moves), import
+   Homebase's Team export (Imports page) to create/update employees and
+   assign locations. It never overwrites an employee's level once
+   established from timesheets — only location and brand-new employees'
+   levels come from this file.
 
 ## Project layout
 
@@ -216,6 +221,7 @@ backend/app/
   services/
     kitchen_import.py  # Square KDS ticket CSV importer
     timesheet_import.py# Square Team timesheet importer (sessions, breaks, no-shows)
+    team_import.py     # Homebase Team roster importer (employees + locations)
     ratings.py         # plus/minus engine (hour-of-day baseline + shrinkage)
     demand.py          # tickets-per-hour forecast for shift weighting
     solver.py          # OR-Tools CP-SAT schedule generation
