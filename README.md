@@ -141,18 +141,20 @@ login script when that happens.
   `Total: 8 hrs 20 min`; no-show rows (no "Total:" line) are correctly
   skipped rather than counted as zero hours. Feeds a live "Hours
   (Homebase)" column on the Employees page.
-- **Shift swaps** — the original plan assumed a separate trade-board
-  report; a real screenshot showed there isn't one. A covered shift
-  instead shows as a flagged cell (orange, warning icon, "Open Shift
-  approved") directly in the normal weekly Schedule Builder grid, under
-  the covering employee's row. `homebase_scrape_config.json`'s
-  `trade_board` section and `services/homebase_browser.py` are placeholders
-  pending: (a) whether the covering employee alone (visible from the row,
-  no click needed) is enough, or the original releaser is also wanted
-  (visible only after clicking the cell — more fragile to script), and
-  (b) the full set of marker states Homebase uses. **A failure here never
-  blocks or discards the hours sync** — the two are scraped and persisted
-  independently.
+- **Shift swaps** — confirmed against real screenshots: there's no
+  separate trade-board report. A covered shift shows as a flagged cell
+  (orange, warning icon, "Open Shift approved") directly in the normal
+  weekly Schedule Builder grid, under the covering employee's row —
+  confirmed that's all that's needed (no click-through for who originally
+  released it). Since this page is a visual calendar grid rather than a
+  table, it's scraped by **position, not DOM structure**: every flagged
+  cell is matched to whichever day-column header sits closest on the x
+  axis and whichever employee name sits closest on the y axis
+  (`services/homebase_grid_parser.py`, unit-tested with synthetic
+  coordinates). That's deliberately more resilient to a Homebase layout
+  change than a class-name or table selector would be. Feeds the **Shift
+  Swaps** page. **A failure here never blocks or discards the hours
+  sync** — the two are scraped and persisted independently.
 
 Everything the scraper reads from (URLs, column-header keywords) lives in
 `backend/homebase_scrape_config.json`, not code, so recalibrating after a
@@ -221,20 +223,18 @@ backend/app/
     breaks.py          # CP-SAT break scheduling (staggered, demand-aware)
     homebase.py        # Homebase API connector for the day's roster (Enterprise plan)
     homebase_browser.py       # Playwright driver: reuses a saved login session
-    homebase_table_parser.py  # pure HTML-table parsing, unit-tested without a browser
+    homebase_table_parser.py  # pure HTML-table parsing (hours) — unit-tested without a browser
+    homebase_grid_parser.py   # pure position-based grid parsing (shift swaps) — same
   scripts/
     homebase_login.py  # one-time: opens a real window for a human to log in
     homebase_sync.py    # run daily by Task Scheduler; never logs in itself
-backend/homebase_scrape_config.json  # URLs + column keywords the sync reads — edit, don't redeploy
+backend/homebase_scrape_config.json  # URLs + column/marker keywords the sync reads — edit, don't redeploy
 backend/tests/         # importer, ratings, solver and API tests
-frontend/src/pages/    # React UI (schedule board, employees, ratings…)
+frontend/src/pages/    # React UI (schedule board, employees, shift swaps, ratings…)
 ```
 
 ## Roadmap
 
-- Shift-swap scraping: rewrite against the real Schedule Builder grid
-  (flagged "Open Shift approved" cells) once scope (picker only vs. also
-  who released it) and the full marker-state list are confirmed.
 - Adjusted +/- via ridge regression (separates individuals who always work
   together; raw on/off +/- inherits crewmate effects).
 - Per-shift skill requirements (skills are currently informational).

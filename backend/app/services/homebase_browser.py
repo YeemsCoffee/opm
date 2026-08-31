@@ -21,12 +21,33 @@ from playwright.sync_api import sync_playwright
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import HomebaseSyncStatus, HoursSnapshot, ShiftSwap
-from .homebase_table_parser import parse_hours_table, parse_swaps_table
+from ..models import Employee, HomebaseSyncStatus, HoursSnapshot, ShiftSwap
+from .homebase_grid_parser import PositionedText, find_open_shift_pickups
+from .homebase_table_parser import parse_hours_table
 
 PROFILE_DIR = Path(os.environ.get("HOMEBASE_PROFILE_DIR", Path(__file__).parent.parent.parent / ".homebase_profile"))
 CONFIG_PATH = Path(os.environ.get("HOMEBASE_SCRAPE_CONFIG", Path(__file__).parent.parent.parent / "homebase_scrape_config.json"))
 LOGIN_WAIT_TIMEOUT_MS = 10 * 60 * 1000  # give a human up to 10 minutes to log in
+
+# Runs in the browser: collects every leaf (childless) element with visible,
+# non-empty text and its rendered position. Used to locate day-column
+# headers, employee-row names, and flagged shift blocks by position alone —
+# no dependency on Homebase's DOM structure or class names.
+_EXTRACT_LEAF_TEXT_JS = """
+() => {
+  const out = [];
+  const all = document.querySelectorAll('body *');
+  for (const el of all) {
+    if (el.children.length > 0) continue;
+    const text = (el.textContent || '').trim();
+    if (!text) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) continue;
+    out.push({ text, x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 });
+  }
+  return out;
+}
+"""
 
 
 def load_config() -> dict:
@@ -111,18 +132,17 @@ def sync_once(db: Session, period_start: date | None = None, period_end: date | 
             if not session_expired:
                 tb = cfg["trade_board"]
                 try:
-                    page.goto(cfg["base_url"] + tb["path"])
+                    week_anchor = date.today()
+                    page.goto(cfg["base_url"] + tb["path_template"].format(date=week_anchor.isoformat()))
                     page.wait_for_load_state("networkidle")
                     if _session_looks_logged_out(page.url):
                         session_expired = True
                         raise RuntimeError("Homebase session expired — please re-run the login script.")
-                    swap_rows = parse_swaps_table(
-                        page.content(),
-                        tb["date_header_keywords"],
-                        tb["released_by_header_keywords"],
-                        tb["covered_by_header_keywords"],
-                        tb["role_header_keywords"],
-                        tb["status_header_keywords"],
+                    raw = page.evaluate(_EXTRACT_LEAF_TEXT_JS)
+                    positioned = [PositionedText(r["text"], r["x"], r["y"]) for r in raw]
+                    employee_names = [n for (n,) in db.execute(select(Employee.name))]
+                    swap_rows = find_open_shift_pickups(
+                        positioned, tb["marker_keywords"], employee_names, week_anchor
                     )
                     swaps_ok = True
                 except Exception as exc:  # noqa: BLE001
@@ -159,29 +179,23 @@ def sync_once(db: Session, period_start: date | None = None, period_end: date | 
                 )
             )
 
+    # Only the picker's identity + date is collected (confirmed sufficient) —
+    # released_by/role/times stay blank/null for rows from this scrape path.
     for row in swap_rows:
-        shift_date = _parse_loose_date(row.get("date", ""))
-        if shift_date is None:
-            continue
         existing = db.scalar(
             select(ShiftSwap).where(
-                ShiftSwap.shift_date == shift_date,
-                ShiftSwap.released_by == row.get("released_by", ""),
-                ShiftSwap.covered_by == row.get("covered_by", ""),
+                ShiftSwap.shift_date == row["shift_date"],
+                ShiftSwap.covered_by == row["employee_name"],
             )
         )
         if existing:
-            existing.status = row.get("status", "")
-            existing.role = row.get("role", "")
             existing.synced_at = datetime.utcnow()
         else:
             db.add(
                 ShiftSwap(
-                    shift_date=shift_date,
-                    released_by=row.get("released_by", ""),
-                    covered_by=row.get("covered_by", ""),
-                    role=row.get("role", ""),
-                    status=row.get("status", ""),
+                    shift_date=row["shift_date"],
+                    covered_by=row["employee_name"],
+                    status="Open Shift approved",
                 )
             )
 
@@ -198,12 +212,3 @@ def sync_once(db: Session, period_start: date | None = None, period_end: date | 
         "swap_rows": len(swap_rows),
         "error": "; ".join(errors),
     }
-
-
-def _parse_loose_date(text: str) -> date | None:
-    for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%b %d, %Y", "%B %d, %Y", "%m/%d/%y"):
-        try:
-            return datetime.strptime(text.strip(), fmt).date()
-        except ValueError:
-            continue
-    return None

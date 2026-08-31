@@ -9,6 +9,7 @@ import SettingsPage from './pages/SettingsPage'
 import MyAvailabilityPage from './pages/MyAvailabilityPage'
 import PatternPage from './pages/PatternPage'
 import BreaksPage from './pages/BreaksPage'
+import ShiftSwapsPage from './pages/ShiftSwapsPage'
 
 export default function App() {
   const navigate = useNavigate()
@@ -31,6 +32,7 @@ export default function App() {
         {role === 'manager' && <NavLink to="/breaks">Breaks</NavLink>}
         {role === 'manager' && <NavLink to="/pattern">Shift pattern</NavLink>}
         {role === 'manager' && <NavLink to="/employees">Employees</NavLink>}
+        {role === 'manager' && <NavLink to="/shift-swaps">Shift Swaps</NavLink>}
         {role === 'manager' && <NavLink to="/ratings">Plus/Minus</NavLink>}
         {role === 'manager' && <NavLink to="/imports">Imports</NavLink>}
         {role === 'manager' && <NavLink to="/settings">Settings</NavLink>}
@@ -47,6 +49,7 @@ export default function App() {
           {role === 'manager' && <Route path="/breaks" element={<BreaksPage />} />}
           {role === 'manager' && <Route path="/pattern" element={<PatternPage />} />}
           {role === 'manager' && <Route path="/employees" element={<EmployeesPage />} />}
+          {role === 'manager' && <Route path="/shift-swaps" element={<ShiftSwapsPage />} />}
           {role === 'manager' && <Route path="/ratings" element={<RatingsPage />} />}
           {role === 'manager' && <Route path="/imports" element={<ImportsPage />} />}
           {role === 'manager' && <Route path="/settings" element={<SettingsPage />} />}

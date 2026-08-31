@@ -222,6 +222,20 @@ export interface HoursSnapshot {
   matched_employee_id: number | null
 }
 
+export interface ShiftSwap {
+  id: number
+  shift_date: string
+  start_min: number | null
+  end_min: number | null
+  released_by: string
+  covered_by: string
+  role: string
+  status: string
+  synced_at: string
+  covered_by_employee_id: number | null
+  released_by_employee_id: number | null
+}
+
 export interface Rating {
   employee_id: number
   employee_name: string

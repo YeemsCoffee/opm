@@ -1,10 +1,10 @@
-"""Pure HTML-table parsing for the Homebase scraper.
+"""Pure HTML-table parsing for the Homebase Timesheets (hours) scrape.
 
 Kept separate from the Playwright driver (homebase_browser.py) so the
 column-matching logic can be unit tested against saved sample HTML without
-a real browser or a live Homebase session. When the real pages are
-available, adjust HEADER_KEYWORDS in homebase_scrape_config.json rather
-than this code — that's the calibration step flagged to the user.
+a real browser or a live Homebase session. Calibrated against a real
+Timesheets screenshot. The shift-swaps scrape is a different page (a
+visual calendar grid, not a table) and lives in homebase_grid_parser.py.
 """
 
 import re
@@ -119,33 +119,3 @@ def parse_hours_table(html: str, name_keywords: list[str], worked_keywords: list
         if hours is not None:
             out.append({"name": r["name"].title(), "hours": hours})
     return out
-
-
-def parse_swaps_table(
-    html: str,
-    date_keywords: list[str],
-    released_by_keywords: list[str],
-    covered_by_keywords: list[str],
-    role_keywords: list[str],
-    status_keywords: list[str],
-) -> list[dict]:
-    rows, missing = find_best_table(
-        html,
-        {
-            "date": date_keywords,
-            "covered_by": covered_by_keywords,
-            "released_by": released_by_keywords,
-            "role": role_keywords,
-            "status": status_keywords,
-        },
-    )
-    # date + covered_by are the two fields this feature actually needs;
-    # released_by/role/status are nice-to-have and may not exist on every
-    # Homebase layout, so don't hard-fail on those alone
-    required_missing = [f for f in ("date", "covered_by") if f in missing]
-    if required_missing:
-        raise ValueError(
-            f"Trade board page: could not find column(s) {required_missing} — "
-            "the scrape config's header keywords need calibration against the real page."
-        )
-    return [r for r in rows if r.get("covered_by")]

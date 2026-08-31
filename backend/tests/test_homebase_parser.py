@@ -1,4 +1,4 @@
-from app.services.homebase_table_parser import extract_hours_total, parse_hours_table, parse_swaps_table
+from app.services.homebase_table_parser import extract_hours_total, parse_hours_table
 
 # Structure matches a real Homebase Timesheets screenshot: Team member /
 # Worked / Total paid breaks / Total unpaid breaks / Issues / Actions.
@@ -24,14 +24,6 @@ HOURS_HTML = """
 </table>
 """
 
-SWAPS_HTML = """
-<table>
-  <tr><th>Date</th><th>Role</th><th>Released by</th><th>Covered by</th><th>Status</th></tr>
-  <tr><td>08/22/2026</td><td>K1</td><td>Kyle Dador</td><td>Syd Smith</td><td>Approved</td></tr>
-  <tr><td>08/23/2026</td><td>B2</td><td>Sandra Armenta</td><td></td><td>Open</td></tr>
-</table>
-"""
-
 
 def test_extract_hours_total():
     text = "9:28 am - 5:48 pm Total: 8 hrs 20 min 20 min over scheduled time"
@@ -54,17 +46,3 @@ def test_parse_hours_table_bad_config_raises():
         assert False, "should have raised"
     except ValueError as exc:
         assert "calibration" in str(exc)
-
-
-def test_parse_swaps_table():
-    rows = parse_swaps_table(
-        SWAPS_HTML,
-        date_keywords=["date"],
-        released_by_keywords=["released by"],
-        covered_by_keywords=["covered by"],
-        role_keywords=["role"],
-        status_keywords=["status"],
-    )
-    assert len(rows) == 1  # the open (uncovered) row is excluded
-    assert rows[0]["covered_by"] == "syd smith"
-    assert rows[0]["released_by"] == "kyle dador"

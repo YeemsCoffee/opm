@@ -9,12 +9,8 @@
     "worked_header_keywords": ["worked"]
   },
   "trade_board": {
-    "_comment": "PLACEHOLDER — confirmed WRONG against a real schedule screenshot. There is no separate trade-board table: a covered shift shows as a flagged cell (orange, warning icon, 'Open Shift approved') directly in the regular weekly Schedule Builder grid, under the covering employee's own row. This section's path/table-column approach needs a rewrite once it's decided whether grid-only (who covered it, already visible from the row) is enough, or whether click-through detail (who originally released it) is also needed. Sync failures here are isolated from the hours sync and never block it.",
-    "path": "/schedule_builder/trades",
-    "date_header_keywords": ["date", "shift date"],
-    "released_by_header_keywords": ["released by", "original", "posted by", "dropped by"],
-    "covered_by_header_keywords": ["covered by", "picked up by", "claimed by", "assigned to", "traded to"],
-    "role_header_keywords": ["role", "position"],
-    "status_header_keywords": ["status"]
+    "_comment": "Confirmed against real screenshots: there is no separate trade-board page. A shift released and picked up shows as a flagged cell (orange, warning icon, 'Open Shift approved') directly in the regular weekly Schedule Builder grid, under the covering employee's own row — that row IS the picker's identity, confirmed sufficient (no click-through needed). Scraped by visual position (nearest day-header column, nearest employee-name row), not DOM structure, since this page is a calendar grid rather than a table. {date} is filled in with any date inside the target week (Homebase's own weeks run Sunday-Saturday and it resolves the rest). Sync failures here are isolated from the hours sync and never block it.",
+    "path_template": "/schedule/employee/week/{date}",
+    "marker_keywords": ["open shift approved"]
   }
 }
